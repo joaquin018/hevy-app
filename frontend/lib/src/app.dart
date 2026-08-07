@@ -12,6 +12,22 @@ const _surface = Color(0xB31C2028);
 const _muted = Color(0xFF9399A6);
 const _border = Color(0x24FFFFFF);
 
+class _ActiveWorkout {
+  const _ActiveWorkout({
+    required this.routineName,
+    required this.startedAt,
+    required this.exercises,
+    required this.firstExercise,
+  });
+
+  final String routineName;
+  final DateTime startedAt;
+  final List<String> exercises;
+  final String firstExercise;
+}
+
+final _activeWorkout = ValueNotifier<_ActiveWorkout?>(null);
+
 class _AtmosphericBackground extends StatelessWidget {
   const _AtmosphericBackground({required this.child});
 
@@ -117,30 +133,40 @@ class _RoutineData {
   const _RoutineData(this.name, this.exercises);
 
   final String name;
-  final String exercises;
+  final List<String> exercises;
 }
 
 const _initialRoutines = [
-  _RoutineData(
-    'Lunes',
-    'Press Banca Inclinado Con Barra, Fondos, Press Banca Con Barra, Extensión De Tríceps En Polea',
-  ),
-  _RoutineData(
-    'Martes',
-    'Jalón Al Pecho Agarre Cerrado, Remo En Polea Baja Agarre Neutro, Pullover, Curl De Bíceps En Polea',
-  ),
-  _RoutineData(
-    'Miércoles',
-    'Sentadilla Libre Con Barra, Extensión De Cuádriceps, Peso Muerto Rumano, Curl De Femoral',
-  ),
-  _RoutineData(
-    'Viernes',
-    'Press Banca Inclinado Con Barra, Aperturas En Polea Alta, Jalón Al Pecho Agarre Amplio, Remo',
-  ),
-  _RoutineData(
-    'Sábado',
-    'Elevaciones Laterales, Press Militar, Curl De Bíceps, Extensión De Tríceps',
-  ),
+  _RoutineData('Lunes', [
+    'Press Banca Inclinado Con Barra',
+    'Fondos',
+    'Press Banca Con Barra',
+    'Extensión De Tríceps En Polea',
+  ]),
+  _RoutineData('Martes', [
+    'Jalón Al Pecho Agarre Cerrado',
+    'Remo En Polea Baja Agarre Neutro',
+    'Pullover',
+    'Curl De Bíceps En Polea',
+  ]),
+  _RoutineData('Miércoles', [
+    'Sentadilla Libre Con Barra',
+    'Extensión De Cuádriceps',
+    'Peso Muerto Rumano',
+    'Curl De Femoral',
+  ]),
+  _RoutineData('Viernes', [
+    'Press Banca Inclinado Con Barra',
+    'Aperturas En Polea Alta',
+    'Jalón Al Pecho Agarre Amplio',
+    'Remo',
+  ]),
+  _RoutineData('Sábado', [
+    'Elevaciones Laterales',
+    'Press Militar',
+    'Curl De Bíceps',
+    'Extensión De Tríceps',
+  ]),
 ];
 
 class _WorkoutHomePageState extends State<WorkoutHomePage> {
@@ -153,14 +179,24 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     var folderName = '';
     final name = await showDialog<String>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.82),
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: _border),
+        ),
         title: const Text('Nueva carpeta'),
         content: TextField(
           key: const ValueKey('nombre-carpeta'),
           autofocus: true,
           textCapitalization: TextCapitalization.words,
           inputFormatters: const [_CapitalizedCaseFormatter()],
-          decoration: const InputDecoration(hintText: 'Nombre de la carpeta'),
+          decoration: const InputDecoration(
+            hintText: 'Nombre de la carpeta',
+            hintStyle: TextStyle(color: _muted, fontSize: 16),
+          ),
           onChanged: (value) => folderName = value,
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
@@ -232,6 +268,45 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     });
   }
 
+  Future<void> _deleteFolder(int index) async {
+    final folder = _folders[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.82),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: _border),
+        ),
+        title: const Text('Eliminar carpeta'),
+        content: Text(
+          '¿Quieres eliminar “$folder” y todas las rutinas que contiene?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const ValueKey('confirmar-eliminar-carpeta'),
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF5C68),
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() {
+      _folders.removeAt(index);
+      _folderRoutines.remove(folder);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -242,79 +317,90 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
             children: [
               _RoutinesHeader(onCreateFolder: _createFolder),
               Expanded(
-                child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(
-                    18,
-                    18,
-                    18,
-                    MediaQuery.paddingOf(context).bottom + 36,
-                  ),
-                  itemCount: _folders.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final folder = _folders[index];
-                    return Material(
-                      color: Colors.transparent,
-                      child: ListTile(
-                        key: ValueKey('carpeta-$folder'),
-                        onTap: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => _RoutineFolderPage(
-                                name: folder,
-                                routines: _folderRoutines[folder]!,
+                child: _folders.isEmpty
+                    ? _EmptyFolders(onCreateFolder: _createFolder)
+                    : ListView.separated(
+                        padding: EdgeInsets.fromLTRB(
+                          18,
+                          18,
+                          18,
+                          MediaQuery.paddingOf(context).bottom + 36,
+                        ),
+                        itemCount: _folders.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final folder = _folders[index];
+                          return Material(
+                            color: Colors.transparent,
+                            child: ListTile(
+                              key: ValueKey('carpeta-$folder'),
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => _RoutineFolderPage(
+                                      name: folder,
+                                      routines: _folderRoutines[folder]!,
+                                    ),
+                                  ),
+                                );
+                                if (mounted) setState(() {});
+                              },
+                              tileColor: _surface,
+                              shape: RoundedRectangleBorder(
+                                side: const BorderSide(color: _border),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              leading: const Icon(
+                                Icons.folder_outlined,
+                                color: _accent,
+                                size: 30,
+                              ),
+                              title: Text(
+                                folder,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                _folderRoutines[folder]!.isEmpty
+                                    ? 'Sin rutinas'
+                                    : '${_folderRoutines[folder]!.length} rutinas',
+                                style: const TextStyle(color: _muted),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: ValueKey('renombrar-carpeta-$folder'),
+                                    onPressed: () => _renameFolder(index),
+                                    tooltip: 'Cambiar nombre',
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      color: _muted,
+                                      size: 21,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    key: ValueKey('eliminar-carpeta-$folder'),
+                                    onPressed: () => _deleteFolder(index),
+                                    tooltip: 'Eliminar carpeta',
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Color(0xFFFF5C68),
+                                      size: 22,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
-                          if (mounted) setState(() {});
                         },
-                        tileColor: _surface,
-                        shape: RoundedRectangleBorder(
-                          side: const BorderSide(color: _border),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 12,
-                        ),
-                        leading: const Icon(
-                          Icons.folder_outlined,
-                          color: _accent,
-                          size: 30,
-                        ),
-                        title: Text(
-                          folder,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Text(
-                          _folderRoutines[folder]!.isEmpty
-                              ? 'Sin rutinas'
-                              : '${_folderRoutines[folder]!.length} rutinas',
-                          style: const TextStyle(color: _muted),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              key: ValueKey('renombrar-carpeta-$folder'),
-                              onPressed: () => _renameFolder(index),
-                              tooltip: 'Cambiar nombre',
-                              icon: const Icon(
-                                Icons.edit_outlined,
-                                color: _muted,
-                                size: 21,
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right, color: _muted),
-                          ],
-                        ),
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -335,18 +421,131 @@ class _RoutineFolderPage extends StatefulWidget {
 }
 
 class _RoutineFolderPageState extends State<_RoutineFolderPage> {
+  void _openWorkout({
+    required List<String> exercises,
+    required String routineName,
+    DateTime? resumeStartedAt,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WorkoutPage(
+          initialExercises: exercises,
+          routineName: routineName,
+          resumeStartedAt: resumeStartedAt,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startRoutine(_RoutineData routine) async {
+    final active = _activeWorkout.value;
+    if (active == null) {
+      _openWorkout(exercises: routine.exercises, routineName: routine.name);
+      return;
+    }
+
+    final action = await showDialog<_WorkoutConflictAction>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.84),
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 24, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Hay un entrenamiento en curso',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Si inicias uno nuevo, el entrenamiento actual se eliminará permanentemente.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, height: 1.45),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const ValueKey('retomar-entrenamiento-activo'),
+                  onPressed: () =>
+                      Navigator.of(context).pop(_WorkoutConflictAction.resume),
+                  style: FilledButton.styleFrom(foregroundColor: Colors.white),
+                  child: const Text('Retomar entrenamiento en curso'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const ValueKey('iniciar-nuevo-entrenamiento'),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(_WorkoutConflictAction.startNew),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF292C34),
+                    foregroundColor: const Color(0xFFFF5C68),
+                  ),
+                  child: const Text('Iniciar nuevo entrenamiento'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF292C34),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    if (action == _WorkoutConflictAction.resume) {
+      _openWorkout(
+        exercises: active.exercises,
+        routineName: active.routineName,
+        resumeStartedAt: active.startedAt,
+      );
+      return;
+    }
+    _activeWorkout.value = null;
+    _openWorkout(exercises: routine.exercises, routineName: routine.name);
+  }
+
   Future<void> _createRoutine() async {
     var routineName = '';
     final name = await showDialog<String>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.82),
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: _border),
+        ),
         title: const Text('Nueva rutina'),
         content: TextField(
           key: const ValueKey('nombre-rutina'),
           autofocus: true,
           textCapitalization: TextCapitalization.words,
           inputFormatters: const [_CapitalizedCaseFormatter()],
-          decoration: const InputDecoration(hintText: 'Nombre de la rutina'),
+          decoration: const InputDecoration(
+            hintText: 'Nombre de la rutina',
+            hintStyle: TextStyle(color: _muted, fontSize: 16),
+          ),
           onChanged: (value) => routineName = value,
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
@@ -368,9 +567,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
       ),
     );
     if (!mounted || name == null) return;
-    setState(
-      () => widget.routines.insert(0, _RoutineData(name, 'Sin ejercicios')),
-    );
+    setState(() => widget.routines.insert(0, _RoutineData(name, const [])));
   }
 
   Future<void> _renameRoutine(int index) async {
@@ -415,9 +612,27 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     });
   }
 
+  Future<void> _editRoutine(int index) async {
+    final routine = widget.routines[index];
+    final exercises = await Navigator.of(context).push<List<String>>(
+      MaterialPageRoute<List<String>>(
+        builder: (_) => WorkoutPage(
+          initialExercises: routine.exercises,
+          isEditing: true,
+          routineName: routine.name,
+        ),
+      ),
+    );
+    if (!mounted || exercises == null) return;
+    setState(() {
+      widget.routines[index] = _RoutineData(routine.name, exercises);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: _AtmosphericBackground(
         child: SafeArea(
           bottom: false,
@@ -425,50 +640,56 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
             children: [
               _FolderHeader(name: widget.name, onCreateRoutine: _createRoutine),
               Expanded(
-                child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(
-                    18,
-                    18,
-                    18,
-                    MediaQuery.paddingOf(context).bottom + 36,
-                  ),
-                  itemCount: widget.routines.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 14),
-                  itemBuilder: (context, index) {
-                    final routine = widget.routines[index];
-                    return _RoutineCard(
-                      day: routine.name,
-                      exercises: routine.exercises,
-                      onRename: () => _renameRoutine(index),
-                      onEdit: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => WorkoutPage(
-                            initiallyEmpty:
-                                routine.exercises == 'Sin ejercicios',
-                            isEditing: true,
-                            routineName: routine.name,
-                          ),
+                child: widget.routines.isEmpty
+                    ? _EmptyRoutines(onCreateRoutine: _createRoutine)
+                    : ListView.separated(
+                        padding: EdgeInsets.fromLTRB(
+                          18,
+                          18,
+                          18,
+                          MediaQuery.paddingOf(context).bottom + 36,
                         ),
+                        itemCount: widget.routines.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final routine = widget.routines[index];
+                          return _RoutineCard(
+                            day: routine.name,
+                            exercises: routine.exercises,
+                            onRename: () => _renameRoutine(index),
+                            onEdit: () => _editRoutine(index),
+                            onStart: () => _startRoutine(routine),
+                          );
+                        },
                       ),
-                      onStart: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => WorkoutPage(
-                            initiallyEmpty:
-                                routine.exercises == 'Sin ejercicios',
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
         ),
       ),
+      bottomNavigationBar: ValueListenableBuilder<_ActiveWorkout?>(
+        valueListenable: _activeWorkout,
+        builder: (context, activeWorkout, _) {
+          if (activeWorkout == null) return const SizedBox.shrink();
+          return _ActiveWorkoutBanner(
+            workout: activeWorkout,
+            onResume: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => WorkoutPage(
+                  initialExercises: activeWorkout.exercises,
+                  routineName: activeWorkout.routineName,
+                  resumeStartedAt: activeWorkout.startedAt,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
+
+enum _WorkoutConflictAction { resume, startNew }
 
 class _RoutinesHeader extends StatelessWidget {
   const _RoutinesHeader({required this.onCreateFolder});
@@ -503,6 +724,46 @@ class _RoutinesHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyFolders extends StatelessWidget {
+  const _EmptyFolders({required this.onCreateFolder});
+
+  final VoidCallback onCreateFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.folder_open_outlined, color: _accent, size: 52),
+            const SizedBox(height: 18),
+            const Text(
+              'Aún no hay carpetas',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Crea una carpeta para organizar tus rutinas de entrenamiento.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _muted, fontSize: 15, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            FilledButton.icon(
+              key: const ValueKey('crear-primera-carpeta'),
+              onPressed: onCreateFolder,
+              icon: const Icon(Icons.create_new_folder_outlined),
+              label: const Text('Crear carpeta'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -544,6 +805,46 @@ class _FolderHeader extends StatelessWidget {
   }
 }
 
+class _EmptyRoutines extends StatelessWidget {
+  const _EmptyRoutines({required this.onCreateRoutine});
+
+  final VoidCallback onCreateRoutine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.fitness_center, color: _accent, size: 50),
+            const SizedBox(height: 18),
+            const Text(
+              'Aún no hay rutinas',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Crea una rutina para organizar los ejercicios de tu entrenamiento.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _muted, fontSize: 15, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            FilledButton.icon(
+              key: const ValueKey('crear-primera-rutina'),
+              onPressed: onCreateRoutine,
+              icon: const Icon(Icons.add),
+              label: const Text('Crear rutina'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
     required this.day,
@@ -554,7 +855,7 @@ class _RoutineCard extends StatelessWidget {
   });
 
   final String day;
-  final String exercises;
+  final List<String> exercises;
   final VoidCallback onRename;
   final VoidCallback onEdit;
   final VoidCallback onStart;
@@ -611,7 +912,7 @@ class _RoutineCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    exercises,
+                    exercises.isEmpty ? 'Sin ejercicios' : exercises.join(', '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -659,17 +960,176 @@ class _RoutineCard extends StatelessWidget {
   }
 }
 
+class _ActiveWorkoutBanner extends StatefulWidget {
+  const _ActiveWorkoutBanner({required this.workout, required this.onResume});
+
+  final _ActiveWorkout workout;
+  final VoidCallback onResume;
+
+  @override
+  State<_ActiveWorkoutBanner> createState() => _ActiveWorkoutBannerState();
+}
+
+class _ActiveWorkoutBannerState extends State<_ActiveWorkoutBanner> {
+  Timer? _ticker;
+
+  int get _elapsed =>
+      DateTime.now().difference(widget.workout.startedAt).inSeconds;
+
+  String get _formattedElapsed {
+    final elapsed = _elapsed;
+    final hours = elapsed ~/ 3600;
+    final minutes = (elapsed % 3600) ~/ 60;
+    final seconds = elapsed % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:'
+          '${minutes.toString().padLeft(2, '0')}:'
+          '${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _discard() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.82),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Descartar entrenamiento'),
+        content: const Text('¿Quieres descartar el entrenamiento en curso?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const ValueKey('confirmar-descartar-entrenamiento'),
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF5C68),
+            ),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) _activeWorkout.value = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Material(
+          color: const Color(0xFF1A1D24),
+          borderRadius: BorderRadius.circular(28),
+          child: InkWell(
+            key: const ValueKey('entrenamiento-activo'),
+            onTap: widget.onResume,
+            borderRadius: BorderRadius.circular(28),
+            child: SizedBox(
+              height: 66,
+              child: Row(
+                children: [
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF292C34),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.keyboard_arrow_up, size: 28),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 9,
+                              height: 9,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF62D84E),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${widget.workout.routineName} $_formattedElapsed',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.workout.firstExercise,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: _muted, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('descartar-entrenamiento-activo'),
+                    onPressed: _discard,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Color(0xFFFF5C68),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class WorkoutPage extends StatefulWidget {
   const WorkoutPage({
     super.key,
-    this.initiallyEmpty = false,
+    this.initialExercises = const ['Press Banca Inclinado Con Barra', 'Fondos'],
     this.isEditing = false,
     this.routineName,
+    this.resumeStartedAt,
   });
 
-  final bool initiallyEmpty;
+  final List<String> initialExercises;
   final bool isEditing;
   final String? routineName;
+  final DateTime? resumeStartedAt;
 
   @override
   State<WorkoutPage> createState() => _WorkoutPageState();
@@ -688,9 +1148,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
   @override
   void initState() {
     super.initState();
-    _exerciseOrder = widget.initiallyEmpty
-        ? []
-        : ['Press Banca Inclinado Con Barra', 'Fondos'];
+    _exerciseOrder = List.of(widget.initialExercises);
     _exerciseSets.addAll({
       'Press Banca Inclinado Con Barra': const [
         _SetData('W', '20kg x 10', '20', '10'),
@@ -705,14 +1163,32 @@ class _WorkoutPageState extends State<WorkoutPage> {
         _SetData('3', '0kg x 4', '0', '4'),
       ],
     });
+    for (final exercise in _exerciseOrder) {
+      _exerciseSets.putIfAbsent(
+        exercise,
+        () => const [_SetData('1', '—', '0', '0')],
+      );
+    }
     if (widget.isEditing) return;
+    final startedAt = widget.resumeStartedAt ?? DateTime.now();
+    _elapsedSeconds = DateTime.now().difference(startedAt).inSeconds;
+    final activeWorkout = _ActiveWorkout(
+      routineName: widget.routineName ?? 'Rutina',
+      startedAt: startedAt,
+      exercises: List.of(_exerciseOrder),
+      firstExercise: _exerciseOrder.isEmpty
+          ? 'Sin ejercicios'
+          : _exerciseOrder.first,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _activeWorkout.value = activeWorkout;
+    });
     _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsedSeconds++);
     });
   }
 
   String get _formattedElapsedTime {
-    if (_elapsedSeconds < 60) return '${_elapsedSeconds}s';
     final hours = _elapsedSeconds ~/ 3600;
     final minutes = (_elapsedSeconds % 3600) ~/ 60;
     final seconds = _elapsedSeconds % 60;
@@ -842,7 +1318,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
             children: [
               _WorkoutHeader(
                 onFinish: widget.isEditing
-                    ? () => Navigator.of(context).pop()
+                    ? () => Navigator.of(context).pop(List.of(_exerciseOrder))
                     : _showFinishSheet,
                 elapsedTime: _formattedElapsedTime,
                 volume: _formattedVolume,

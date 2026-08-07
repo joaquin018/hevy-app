@@ -7,20 +7,35 @@ Stack mínimo:
 - PostgreSQL como única fuente de datos.
 - Cloudflare Tunnel opcional.
 
+## Historial de entrenamientos
+
+PostgreSQL guarda sesiones, ejercicios y cada serie realizada. La primera
+sesión crea el punto de partida; las siguientes consultan el último peso y las
+repeticiones registradas para completar la columna `Anterior`.
+
+Durante el desarrollo se usa el usuario fijo
+`00000000-0000-4000-8000-000000000001`. El esquema ya separa los datos por
+usuario para conectar autenticación posteriormente.
+
 ## API y PostgreSQL
 
 ```bash
 docker compose up --build -d
 curl http://localhost:3000/health
-curl http://localhost:3000/hello
 ```
 
-Para guardar otro saludo:
+Para guardar una sesión:
 
 ```bash
-curl -X POST http://localhost:3000/hello \
+curl -X POST http://localhost:3000/workout-sessions \
   -H "content-type: application/json" \
-  -d '{"message":"Hola desde Docker"}'
+  -d '{"routineName":"Lunes","startedAt":"2026-08-07T20:00:00Z","completedAt":"2026-08-07T20:45:00Z","durationSeconds":2700,"exercises":[{"name":"Press Banca Inclinado Con Barra","muscleGroup":"Pecho","sets":[{"type":"normal","kg":40,"reps":6,"completed":true}]}]}'
+```
+
+Para consultar la última ejecución de un ejercicio:
+
+```bash
+curl "http://localhost:3000/exercises/previous?name=Press%20Banca%20Inclinado%20Con%20Barra"
 ```
 
 ## Flutter

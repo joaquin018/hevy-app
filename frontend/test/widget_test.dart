@@ -3,6 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hevy_hello/src/app.dart';
 
 void main() {
+  testWidgets('shows an actionable empty state without folders', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const HelloApp());
+
+    await tester.tap(
+      find.byKey(const ValueKey('eliminar-carpeta-Entrenamiento')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirmar-eliminar-carpeta')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aún no hay carpetas'), findsOneWidget);
+    expect(find.text('Crear carpeta'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('crear-primera-carpeta')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nueva carpeta'), findsOneWidget);
+  });
+
   testWidgets('opens a routine and returns to workout home', (tester) async {
     await tester.pumpWidget(const HelloApp());
 
@@ -34,6 +53,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Potencia'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('carpeta-Potencia')));
+    await tester.pumpAndSettle();
+    expect(find.text('Aún no hay rutinas'), findsOneWidget);
+    expect(find.byKey(const ValueKey('crear-primera-rutina')), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('eliminar-carpeta-Potencia')));
+    await tester.pumpAndSettle();
+    expect(find.text('Eliminar carpeta'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Potencia'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('eliminar-carpeta-Potencia')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirmar-eliminar-carpeta')));
+    await tester.pumpAndSettle();
+    expect(find.text('Potencia'), findsNothing);
+
     await tester.tap(find.byKey(const ValueKey('carpeta-Entrenamiento')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('crear-rutina')), findsOneWidget);
@@ -46,7 +85,7 @@ void main() {
     await tester.tap(find.text('Crear'));
     await tester.pumpAndSettle();
     expect(find.text('Tren Superior'), findsOneWidget);
-    expect(find.text('Sin ejercicios'), findsOneWidget);
+    expect(find.text('Sin ejercicios'), findsWidgets);
     await tester.tap(
       find.byKey(const ValueKey('renombrar-rutina-Tren Superior')),
     );
@@ -80,13 +119,21 @@ void main() {
     expect(find.text('Agregar ejercicio'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('entrenamiento-activo')), findsOneWidget);
+    expect(find.textContaining('Torso Completo'), findsWidgets);
+    expect(find.text('Sin ejercicios'), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey('iniciar-rutina-Lunes')));
     await tester.pumpAndSettle();
+    expect(find.text('Hay un entrenamiento en curso'), findsOneWidget);
+    expect(find.text('Retomar entrenamiento en curso'), findsOneWidget);
+    expect(find.text('Iniciar nuevo entrenamiento'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('iniciar-nuevo-entrenamiento')));
+    await tester.pumpAndSettle();
 
-    expect(find.text('0s'), findsOneWidget);
+    expect(find.text('00:00'), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('2s'), findsOneWidget);
+    expect(find.text('00:02'), findsOneWidget);
 
     expect(
       find.byKey(const ValueKey('finalizar-entrenamiento')),
@@ -95,7 +142,7 @@ void main() {
     expect(find.text('Press Banca Inclinado Con Barra'), findsOneWidget);
     expect(find.text('Fondos'), findsOneWidget);
     expect(find.text('Agregar ejercicio'), findsOneWidget);
-    expect(find.text('Añadir serie'), findsNWidgets(2));
+    expect(find.text('Añadir serie'), findsNWidgets(4));
 
     await tester.tap(find.byKey(const ValueKey('finalizar-entrenamiento')));
     await tester.pumpAndSettle();
