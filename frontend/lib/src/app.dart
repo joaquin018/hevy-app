@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import 'workout_api.dart';
 
 const _accent = Color(0xFF7C8CFF);
 const _page = Color(0xFF090B0F);
@@ -17,12 +20,14 @@ class _ActiveWorkout {
     required this.routineName,
     required this.startedAt,
     required this.exercises,
+    required this.originalExercises,
     required this.firstExercise,
   });
 
   final String routineName;
   final DateTime startedAt;
   final List<String> exercises;
+  final List<String> originalExercises;
   final String firstExercise;
 }
 
@@ -100,7 +105,9 @@ class _AtmosphericBackground extends StatelessWidget {
 }
 
 class HelloApp extends StatelessWidget {
-  const HelloApp({super.key});
+  const HelloApp({super.key, this.enableCloudPersistence = true});
+
+  final bool enableCloudPersistence;
 
   @override
   Widget build(BuildContext context) {
@@ -117,13 +124,15 @@ class HelloApp extends StatelessWidget {
         fontFamily: 'Roboto',
         useMaterial3: true,
       ),
-      home: const WorkoutHomePage(),
+      home: WorkoutHomePage(enableCloudPersistence: enableCloudPersistence),
     );
   }
 }
 
 class WorkoutHomePage extends StatefulWidget {
-  const WorkoutHomePage({super.key});
+  const WorkoutHomePage({super.key, this.enableCloudPersistence = true});
+
+  final bool enableCloudPersistence;
 
   @override
   State<WorkoutHomePage> createState() => _WorkoutHomePageState();
@@ -136,44 +145,75 @@ class _RoutineData {
   final List<String> exercises;
 }
 
-const _initialRoutines = [
-  _RoutineData('Lunes', [
-    'Press Banca Inclinado Con Barra',
-    'Fondos',
-    'Press Banca Con Barra',
-    'Extensión De Tríceps En Polea',
-  ]),
-  _RoutineData('Martes', [
-    'Jalón Al Pecho Agarre Cerrado',
-    'Remo En Polea Baja Agarre Neutro',
-    'Pullover',
-    'Curl De Bíceps En Polea',
-  ]),
-  _RoutineData('Miércoles', [
-    'Sentadilla Libre Con Barra',
-    'Extensión De Cuádriceps',
-    'Peso Muerto Rumano',
-    'Curl De Femoral',
-  ]),
-  _RoutineData('Viernes', [
-    'Press Banca Inclinado Con Barra',
-    'Aperturas En Polea Alta',
-    'Jalón Al Pecho Agarre Amplio',
-    'Remo',
-  ]),
-  _RoutineData('Sábado', [
-    'Elevaciones Laterales',
-    'Press Militar',
-    'Curl De Bíceps',
-    'Extensión De Tríceps',
-  ]),
-];
-
 class _WorkoutHomePageState extends State<WorkoutHomePage> {
-  final List<String> _folders = ['Entrenamiento'];
-  final Map<String, List<_RoutineData>> _folderRoutines = {
-    'Entrenamiento': List<_RoutineData>.of(_initialRoutines),
-  };
+  final WorkoutApi _workoutApi = WorkoutApi();
+  final List<String> _folders = [];
+  final Map<String, List<_RoutineData>> _folderRoutines = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enableCloudPersistence) _loadRoutineFolders();
+  }
+
+  Future<void> _loadRoutineFolders() async {
+    try {
+      final savedFolders = await _workoutApi.getRoutineFolders();
+      if (!mounted) return;
+      setState(() {
+        _folders
+          ..clear()
+          ..addAll(savedFolders.map((folder) => folder.name));
+        _folderRoutines
+          ..clear()
+          ..addEntries(
+            savedFolders.map(
+              (folder) => MapEntry(folder.name, [
+                for (final routine in folder.routines)
+                  _RoutineData(routine.name, routine.exercises),
+              ]),
+            ),
+          );
+      });
+    } catch (_) {
+      if (mounted) _showPersistenceError();
+    }
+  }
+
+  Future<void> _persistRoutineFolders() async {
+    if (!widget.enableCloudPersistence) return;
+    try {
+      await _workoutApi.saveRoutineFolders([
+        for (final folder in _folders)
+          RoutineFolderPayload(
+            name: folder,
+            routines: [
+              for (final routine in _folderRoutines[folder]!)
+                RoutinePayload(
+                  name: routine.name,
+                  exercises: routine.exercises,
+                ),
+            ],
+          ),
+      ]);
+    } catch (_) {
+      if (mounted) _showPersistenceError();
+    }
+  }
+
+  void _showPersistenceError() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF292C34),
+          content: Text(
+            'No se pudieron sincronizar las rutinas con la nube.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+  }
 
   Future<void> _createFolder() async {
     var folderName = '';
@@ -222,6 +262,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
       _folders.add(name);
       _folderRoutines[name] = [];
     });
+    await _persistRoutineFolders();
   }
 
   Future<void> _renameFolder(int index) async {
@@ -266,6 +307,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
       _folders[index] = name;
       _folderRoutines[name] = routines;
     });
+    await _persistRoutineFolders();
   }
 
   Future<void> _deleteFolder(int index) async {
@@ -305,6 +347,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
       _folders.removeAt(index);
       _folderRoutines.remove(folder);
     });
+    await _persistRoutineFolders();
   }
 
   Future<void> _openFolderOptions(int index) async {
@@ -353,6 +396,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
         ..clear()
         ..addAll(folders);
     });
+    await _persistRoutineFolders();
   }
 
   @override
@@ -388,6 +432,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
                                     builder: (_) => _RoutineFolderPage(
                                       name: folder,
                                       routines: _folderRoutines[folder]!,
+                                      onChanged: _persistRoutineFolders,
                                     ),
                                   ),
                                 );
@@ -449,30 +494,52 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
 }
 
 class _RoutineFolderPage extends StatefulWidget {
-  const _RoutineFolderPage({required this.name, required this.routines});
+  const _RoutineFolderPage({
+    required this.name,
+    required this.routines,
+    required this.onChanged,
+  });
 
   final String name;
   final List<_RoutineData> routines;
+  final Future<void> Function() onChanged;
 
   @override
   State<_RoutineFolderPage> createState() => _RoutineFolderPageState();
 }
 
 class _RoutineFolderPageState extends State<_RoutineFolderPage> {
-  void _openWorkout({
+  Future<void> _openWorkout({
     required List<String> exercises,
     required String routineName,
     DateTime? resumeStartedAt,
+    List<String>? originalExercises,
   }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => WorkoutPage(
-          initialExercises: exercises,
-          routineName: routineName,
-          resumeStartedAt: resumeStartedAt,
-        ),
-      ),
-    );
+    return Navigator.of(context)
+        .push<List<String>>(
+          MaterialPageRoute<List<String>>(
+            builder: (_) => WorkoutPage(
+              initialExercises: exercises,
+              routineName: routineName,
+              resumeStartedAt: resumeStartedAt,
+              originalExercises: originalExercises,
+            ),
+          ),
+        )
+        .then((updatedExercises) async {
+          if (!mounted || updatedExercises == null) return;
+          final index = widget.routines.indexWhere(
+            (routine) => routine.name == routineName,
+          );
+          if (index < 0) return;
+          setState(() {
+            widget.routines[index] = _RoutineData(
+              routineName,
+              updatedExercises,
+            );
+          });
+          await widget.onChanged();
+        });
   }
 
   Future<void> _startRoutine(_RoutineData routine) async {
@@ -553,6 +620,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     if (action == _WorkoutConflictAction.resume) {
       _openWorkout(
         exercises: active.exercises,
+        originalExercises: active.originalExercises,
         routineName: active.routineName,
         resumeStartedAt: active.startedAt,
       );
@@ -606,6 +674,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     );
     if (!mounted || name == null) return;
     setState(() => widget.routines.insert(0, _RoutineData(name, const [])));
+    await widget.onChanged();
   }
 
   Future<void> _renameRoutine(int index) async {
@@ -648,6 +717,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     setState(() {
       widget.routines[index] = _RoutineData(name, routine.exercises);
     });
+    await widget.onChanged();
   }
 
   Future<void> _editRoutine(int index) async {
@@ -665,6 +735,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     setState(() {
       widget.routines[index] = _RoutineData(routine.name, exercises);
     });
+    await widget.onChanged();
   }
 
   Future<void> _deleteRoutine(int index) async {
@@ -701,6 +772,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     );
     if (!mounted || confirmed != true) return;
     setState(() => widget.routines.removeAt(index));
+    await widget.onChanged();
   }
 
   Future<void> _openRoutineOptions(int index) async {
@@ -737,6 +809,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         ..clear()
         ..addAll(routines);
     });
+    await widget.onChanged();
   }
 
   @override
@@ -787,6 +860,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
               MaterialPageRoute<void>(
                 builder: (_) => WorkoutPage(
                   initialExercises: activeWorkout.exercises,
+                  originalExercises: activeWorkout.originalExercises,
                   routineName: activeWorkout.routineName,
                   resumeStartedAt: activeWorkout.startedAt,
                 ),
@@ -1284,12 +1358,14 @@ class WorkoutPage extends StatefulWidget {
     this.isEditing = false,
     this.routineName,
     this.resumeStartedAt,
+    this.originalExercises,
   });
 
   final List<String> initialExercises;
   final bool isEditing;
   final String? routineName;
   final DateTime? resumeStartedAt;
+  final List<String>? originalExercises;
 
   @override
   State<WorkoutPage> createState() => _WorkoutPageState();
@@ -1303,26 +1379,19 @@ class _WorkoutPageState extends State<WorkoutPage> {
   int _elapsedSeconds = 0;
   double _totalVolume = 0;
   late List<String> _exerciseOrder;
+  late final List<String> _initialExerciseOrder;
+  late final DateTime _startedAt;
   final Map<String, List<_SetData>> _exerciseSets = {};
+  final Map<String, List<WorkoutSetPayload>> _workoutResults = {};
+  final WorkoutApi _workoutApi = WorkoutApi();
 
   @override
   void initState() {
     super.initState();
     _exerciseOrder = List.of(widget.initialExercises);
-    _exerciseSets.addAll({
-      'Press Banca Inclinado Con Barra': const [
-        _SetData('W', '20kg x 10', '20', '10'),
-        _SetData('1', '40kg x 6', '40', '6'),
-        _SetData('2', '50kg x 6', '50', '6'),
-        _SetData('3', '40kg x 7', '40', '7'),
-        _SetData('4', '40kg x 5', '40', '5'),
-      ],
-      'Fondos': const [
-        _SetData('1', '0kg x 5', '0', '5'),
-        _SetData('2', '0kg x 5', '0', '5'),
-        _SetData('3', '0kg x 4', '0', '4'),
-      ],
-    });
+    _initialExerciseOrder = List.of(
+      widget.originalExercises ?? widget.initialExercises,
+    );
     for (final exercise in _exerciseOrder) {
       _exerciseSets.putIfAbsent(
         exercise,
@@ -1331,11 +1400,13 @@ class _WorkoutPageState extends State<WorkoutPage> {
     }
     if (widget.isEditing) return;
     final startedAt = widget.resumeStartedAt ?? DateTime.now();
+    _startedAt = startedAt;
     _elapsedSeconds = DateTime.now().difference(startedAt).inSeconds;
     final activeWorkout = _ActiveWorkout(
       routineName: widget.routineName ?? 'Rutina',
       startedAt: startedAt,
       exercises: List.of(_exerciseOrder),
+      originalExercises: List.of(_initialExerciseOrder),
       firstExercise: _exerciseOrder.isEmpty
           ? 'Sin ejercicios'
           : _exerciseOrder.first,
@@ -1343,6 +1414,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _activeWorkout.value = activeWorkout;
     });
+    _loadPreviousHistory();
     _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsedSeconds++);
     });
@@ -1359,6 +1431,46 @@ class _WorkoutPageState extends State<WorkoutPage> {
     }
     return '${minutes.toString().padLeft(2, '0')}:'
         '${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _loadPreviousHistory() async {
+    await Future.wait(
+      _exerciseOrder.map((exercise) async {
+        try {
+          final previousSets = await _workoutApi.getPreviousSets(exercise);
+          if (!mounted || previousSets.isEmpty) return;
+          final currentSets = List<_SetData>.of(
+            _exerciseSets[exercise] ?? const [],
+          );
+          while (currentSets.length < previousSets.length) {
+            currentSets.add(
+              _SetData('${currentSets.length + 1}', '—', '0', '0'),
+            );
+          }
+          for (var index = 0; index < previousSets.length; index++) {
+            final previous = previousSets[index];
+            final current = currentSets[index];
+            final kg = previous.kg == previous.kg.roundToDouble()
+                ? previous.kg.round().toString()
+                : previous.kg
+                      .toStringAsFixed(2)
+                      .replaceFirst(RegExp(r'\.?0+$'), '');
+            currentSets[index] = _SetData(
+              current.set,
+              '${kg}kg x ${previous.reps}',
+              current.kg,
+              current.reps,
+              placeholderKg: kg,
+              placeholderReps: previous.reps.toString(),
+            );
+          }
+          _exerciseSets[exercise] = currentSets;
+        } catch (_) {
+          // La sesión puede continuar aunque el historial no esté disponible.
+        }
+      }),
+    );
+    if (mounted) setState(() {});
   }
 
   String get _formattedVolume {
@@ -1389,6 +1501,8 @@ class _WorkoutPageState extends State<WorkoutPage> {
       _exerciseOrder.add(exercise);
       _exerciseSets[exercise] = const [_SetData('1', '—', '0', '0')];
     });
+    _syncActiveWorkout();
+    _loadPreviousHistory();
   }
 
   void _showDuplicateExerciseMessage(String exercise) {
@@ -1422,11 +1536,28 @@ class _WorkoutPageState extends State<WorkoutPage> {
       );
   }
 
+  void _syncActiveWorkout() {
+    if (widget.isEditing) return;
+    final active = _activeWorkout.value;
+    if (active == null) return;
+    _activeWorkout.value = _ActiveWorkout(
+      routineName: active.routineName,
+      startedAt: active.startedAt,
+      exercises: List.of(_exerciseOrder),
+      originalExercises: List.of(_initialExerciseOrder),
+      firstExercise: _exerciseOrder.isEmpty
+          ? 'Sin ejercicios'
+          : _exerciseOrder.first,
+    );
+  }
+
   void _removeExercise(String exercise) {
     setState(() {
       _exerciseOrder.remove(exercise);
       _exerciseSets.remove(exercise);
+      _workoutResults.remove(exercise);
     });
+    _syncActiveWorkout();
   }
 
   void _replaceExercise(String current, String replacement) {
@@ -1440,7 +1571,11 @@ class _WorkoutPageState extends State<WorkoutPage> {
       _exerciseOrder[index] = replacement;
       _exerciseSets[replacement] =
           _exerciseSets.remove(current) ?? const [_SetData('1', '—', '0', '0')];
+      final results = _workoutResults.remove(current);
+      if (results != null) _workoutResults[replacement] = results;
     });
+    _syncActiveWorkout();
+    _loadPreviousHistory();
   }
 
   Future<void> _reorderExercises() async {
@@ -1454,6 +1589,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
       _exerciseOrder = order;
       _exerciseSets.removeWhere((name, _) => !order.contains(name));
     });
+    _syncActiveWorkout();
   }
 
   void _startRestTimer(int seconds) {
@@ -1487,7 +1623,31 @@ class _WorkoutPageState extends State<WorkoutPage> {
   }
 
   Future<void> _showFinishSheet() {
-    return showModalBottomSheet<void>(
+    return _finishWorkout();
+  }
+
+  Future<void> _finishWorkout() async {
+    var updateRoutine = false;
+    final routineChanged = !listEquals(_initialExerciseOrder, _exerciseOrder);
+    if (routineChanged) {
+      final decision = await showModalBottomSheet<bool>(
+        context: context,
+        backgroundColor: _card,
+        barrierColor: Colors.black.withValues(alpha: 0.76),
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (_) => _FinishWorkoutSheet(
+          routineName: widget.routineName ?? 'Rutina',
+          changeDescription: _routineChangeDescription,
+        ),
+      );
+      if (!mounted || decision == null) return;
+      updateRoutine = decision;
+    }
+
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: _card,
       barrierColor: Colors.black.withValues(alpha: 0.76),
@@ -1496,8 +1656,61 @@ class _WorkoutPageState extends State<WorkoutPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => const _FinishWorkoutSheet(),
+      builder: (_) => const _SaveWorkoutSheet(),
     );
+    if (!mounted || confirmed != true) return;
+
+    try {
+      await _workoutApi.saveSession(
+        routineName: widget.routineName ?? 'Rutina',
+        startedAt: _startedAt,
+        completedAt: DateTime.now(),
+        durationSeconds: _elapsedSeconds,
+        exercises: [
+          for (final exercise in _exerciseOrder)
+            WorkoutExercisePayload(
+              name: exercise,
+              sets: _workoutResults[exercise] ?? const [],
+            ),
+        ],
+      );
+      _activeWorkout.value = null;
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pop(updateRoutine ? List<String>.of(_exerciseOrder) : null);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF292C34),
+          content: Text(
+            'No se pudo guardar el entrenamiento. Inténtalo nuevamente.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+  }
+
+  String get _routineChangeDescription {
+    final added = _exerciseOrder
+        .where((exercise) => !_initialExerciseOrder.contains(exercise))
+        .length;
+    final removed = _initialExerciseOrder
+        .where((exercise) => !_exerciseOrder.contains(exercise))
+        .length;
+    if (added > 0 && removed > 0) {
+      return 'Cambiaste $removed ejercicio${removed == 1 ? '' : 's'} por $added nuevo${added == 1 ? '' : 's'}.';
+    }
+    if (added > 0) {
+      return 'Añadiste $added ejercicio${added == 1 ? '' : 's'}.';
+    }
+    if (removed > 0) {
+      return 'Eliminaste $removed ejercicio${removed == 1 ? '' : 's'}.';
+    }
+    return 'Cambiaste el orden de los ejercicios.';
   }
 
   @override
@@ -1547,6 +1760,8 @@ class _WorkoutPageState extends State<WorkoutPage> {
                             replacement,
                           ),
                           onReorder: _reorderExercises,
+                          onSetsChanged: (sets) =>
+                              _workoutResults[_exerciseOrder[index]] = sets,
                           onSetCompleted: _startRestTimer,
                           onVolumeChanged: _updateVolume,
                           sets: _exerciseSets[_exerciseOrder[index]]!,
@@ -1612,7 +1827,7 @@ class AddExercisePage extends StatefulWidget {
 }
 
 class _AddExercisePageState extends State<AddExercisePage> {
-  final List<(String, String)> _exercises = [
+  static const List<(String, String)> _defaultExercises = [
     ('Press Banca Inclinado Con Barra', 'Pecho'),
     ('Aperturas En Polea Alta', 'Pecho'),
     ('Dominadas', 'Dorsales'),
@@ -1622,6 +1837,44 @@ class _AddExercisePageState extends State<AddExercisePage> {
     ('Remo En Polea Baja Agarre Neutro', 'Dorsales'),
     ('Pullover', 'Dorsales'),
   ];
+  final WorkoutApi _workoutApi = WorkoutApi();
+  final List<(String, String)> _exercises = List.of(_defaultExercises);
+  String _query = '';
+
+  List<(String, String)> get _filteredExercises {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return _exercises;
+    return _exercises
+        .where(
+          (exercise) =>
+              exercise.$1.toLowerCase().contains(query) ||
+              exercise.$2.toLowerCase().contains(query),
+        )
+        .toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExercises();
+  }
+
+  Future<void> _loadExercises() async {
+    try {
+      final savedExercises = await _workoutApi.getExercises();
+      if (!mounted) return;
+      setState(() {
+        for (final saved in savedExercises.reversed) {
+          _exercises.removeWhere(
+            (exercise) => exercise.$1.toLowerCase() == saved.name.toLowerCase(),
+          );
+          _exercises.insert(0, (saved.name, saved.muscleGroup));
+        }
+      });
+    } catch (_) {
+      // Los ejercicios incluidos siguen disponibles si no hay conexión.
+    }
+  }
 
   Future<void> _createExercise() async {
     final exercise = await Navigator.of(context).push<(String, String)>(
@@ -1630,7 +1883,31 @@ class _AddExercisePageState extends State<AddExercisePage> {
       ),
     );
     if (!mounted || exercise == null) return;
-    setState(() => _exercises.insert(0, exercise));
+    try {
+      final saved = await _workoutApi.createExercise(
+        name: exercise.$1,
+        muscleGroup: exercise.$2,
+      );
+      if (!mounted) return;
+      setState(() {
+        _exercises.removeWhere(
+          (item) => item.$1.toLowerCase() == saved.name.toLowerCase(),
+        );
+        _exercises.insert(0, (saved.name, saved.muscleGroup));
+        _query = '';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF292C34),
+          content: Text(
+            'No se pudo guardar el ejercicio. Revisa la conexión.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -1651,6 +1928,7 @@ class _AddExercisePageState extends State<AddExercisePage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: TextField(
+                  onChanged: (value) => setState(() => _query = value),
                   decoration: InputDecoration(
                     hintText: 'Buscar ejercicio',
                     hintStyle: const TextStyle(color: _muted),
@@ -1683,11 +1961,11 @@ class _AddExercisePageState extends State<AddExercisePage> {
                     16,
                     MediaQuery.paddingOf(context).bottom + 28,
                   ),
-                  itemCount: _exercises.length,
+                  itemCount: _filteredExercises.length,
                   separatorBuilder: (_, _) =>
                       const Divider(height: 1, indent: 68, color: _border),
                   itemBuilder: (context, index) {
-                    final exercise = _exercises[index];
+                    final exercise = _filteredExercises[index];
                     return _ExercisePickerRow(
                       name: exercise.$1,
                       muscle: exercise.$2,
@@ -2213,7 +2491,13 @@ class _WorkoutHeader extends StatelessWidget {
 }
 
 class _FinishWorkoutSheet extends StatelessWidget {
-  const _FinishWorkoutSheet();
+  const _FinishWorkoutSheet({
+    required this.routineName,
+    required this.changeDescription,
+  });
+
+  final String routineName;
+  final String changeDescription;
 
   @override
   Widget build(BuildContext context) {
@@ -2235,13 +2519,13 @@ class _FinishWorkoutSheet extends StatelessWidget {
               child: const Icon(Icons.assignment_outlined, size: 30),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Actualizar «Lunes»',
+            Text(
+              'Actualizar «$routineName»',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Añadiste 1 ejercicio.',
+            Text(
+              changeDescription,
               style: TextStyle(color: _muted, fontSize: 16),
             ),
             const SizedBox(height: 20),
@@ -2249,7 +2533,7 @@ class _FinishWorkoutSheet extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(context).pop(true),
                 style: FilledButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
@@ -2268,7 +2552,7 @@ class _FinishWorkoutSheet extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(context).pop(false),
                 style: FilledButton.styleFrom(
                   backgroundColor: _surface,
                   foregroundColor: Colors.white,
@@ -2279,6 +2563,60 @@ class _FinishWorkoutSheet extends StatelessWidget {
                 child: const Text(
                   'Mantener rutina original',
                   style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SaveWorkoutSheet extends StatelessWidget {
+  const _SaveWorkoutSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(LucideIcons.saveCheck, size: 42, color: _accent),
+            const SizedBox(height: 16),
+            const Text(
+              'Guardar entrenamiento',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Se guardarán los pesos y repeticiones completados para usarlos como referencia en tu próxima sesión.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _muted, fontSize: 15, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                key: const ValueKey('confirmar-guardar-entrenamiento'),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Guardar entrenamiento'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                style: FilledButton.styleFrom(backgroundColor: _surface),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Colors.white),
                 ),
               ),
             ),
@@ -2314,12 +2652,21 @@ class _Metric extends StatelessWidget {
 }
 
 class _SetData {
-  const _SetData(this.set, this.previous, this.kg, this.reps);
+  const _SetData(
+    this.set,
+    this.previous,
+    this.kg,
+    this.reps, {
+    this.placeholderKg,
+    this.placeholderReps,
+  });
 
   final String set;
   final String previous;
   final String kg;
   final String reps;
+  final String? placeholderKg;
+  final String? placeholderReps;
 }
 
 class _ExerciseCard extends StatefulWidget {
@@ -2330,6 +2677,7 @@ class _ExerciseCard extends StatefulWidget {
     required this.onDelete,
     required this.onReplace,
     required this.onReorder,
+    required this.onSetsChanged,
     required this.onSetCompleted,
     required this.onVolumeChanged,
   });
@@ -2339,6 +2687,7 @@ class _ExerciseCard extends StatefulWidget {
   final VoidCallback onDelete;
   final ValueChanged<String> onReplace;
   final VoidCallback onReorder;
+  final ValueChanged<List<WorkoutSetPayload>> onSetsChanged;
   final ValueChanged<int> onSetCompleted;
   final ValueChanged<double> onVolumeChanged;
 
@@ -2347,8 +2696,63 @@ class _ExerciseCard extends StatefulWidget {
 }
 
 class _ExerciseCardState extends State<_ExerciseCard> {
+  final WorkoutApi _workoutApi = WorkoutApi();
   int _restMinutes = 3;
   late final List<_SetData> _sets = List.of(widget.sets);
+  late final List<WorkoutSetPayload> _results = [
+    for (final set in widget.sets)
+      WorkoutSetPayload(
+        type: set.set == 'W' ? 'warmup' : 'normal',
+        kg: double.tryParse(set.kg) ?? 0,
+        reps: int.tryParse(set.reps) ?? 0,
+        completed: false,
+      ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRestTimer();
+  }
+
+  Future<void> _loadRestTimer() async {
+    try {
+      final seconds = await _workoutApi.getRestTimerSeconds(widget.name);
+      if (!mounted) return;
+      setState(() => _restMinutes = (seconds / 60).round().clamp(1, 5));
+    } catch (_) {
+      // Se conserva el valor predeterminado si no hay conexión.
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExerciseCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.name != widget.name) _loadRestTimer();
+    for (var index = 0; index < widget.sets.length; index++) {
+      if (index >= _sets.length) {
+        _sets.add(widget.sets[index]);
+        _results.add(
+          const WorkoutSetPayload(
+            type: 'normal',
+            kg: 0,
+            reps: 0,
+            completed: false,
+          ),
+        );
+      } else {
+        final current = _sets[index];
+        _sets[index] = _SetData(
+          current.set,
+          widget.sets[index].previous,
+          current.kg,
+          current.reps,
+          placeholderKg: widget.sets[index].placeholderKg,
+          placeholderReps: widget.sets[index].placeholderReps,
+        );
+      }
+    }
+  }
 
   void _addSet() {
     final numbers = _sets.map((set) => int.tryParse(set.set)).whereType<int>();
@@ -2360,7 +2764,16 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               1;
     setState(() {
       _sets.add(_SetData('$nextNumber', '—', '0', '0'));
+      _results.add(
+        const WorkoutSetPayload(
+          type: 'normal',
+          kg: 0,
+          reps: 0,
+          completed: false,
+        ),
+      );
     });
+    widget.onSetsChanged(List.of(_results));
   }
 
   Future<void> _openExerciseOptions() async {
@@ -2419,7 +2832,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     if (confirmed == true && mounted) widget.onDelete();
   }
 
-  Future<void> _openRestTimer(BuildContext context) async {
+  Future<void> _openRestTimer() async {
     final minutes = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: _card,
@@ -2436,6 +2849,23 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     );
     if (minutes != null && mounted) {
       setState(() => _restMinutes = minutes);
+      try {
+        await _workoutApi.saveRestTimerSeconds(
+          exerciseName: widget.name,
+          restSeconds: minutes * 60,
+        );
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF292C34),
+            content: Text(
+              'No se pudo guardar el tiempo de descanso.',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -2467,7 +2897,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 ),
                 IconButton(
                   key: ValueKey('temporizador-${widget.name}'),
-                  onPressed: () => _openRestTimer(context),
+                  onPressed: _openRestTimer,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(
                     width: 34,
@@ -2503,6 +2933,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           for (var index = 0; index < _sets.length; index++)
             _SetRow(
               data: _sets[index],
+              onChanged: (result) {
+                _results[index] = result;
+                widget.onSetsChanged(List.of(_results));
+              },
               onCompleted: () => widget.onSetCompleted(_restMinutes * 60),
               onVolumeChanged: widget.onVolumeChanged,
             ),
@@ -3087,11 +3521,13 @@ enum _SetType { warmup, normal, failure, drop, remove }
 class _SetRow extends StatefulWidget {
   const _SetRow({
     required this.data,
+    required this.onChanged,
     required this.onCompleted,
     required this.onVolumeChanged,
   });
 
   final _SetData data;
+  final ValueChanged<WorkoutSetPayload> onChanged;
   final VoidCallback onCompleted;
   final ValueChanged<double> onVolumeChanged;
 
@@ -3112,17 +3548,63 @@ class _SetRowState extends State<_SetRow> {
   bool _completed = false;
   double _reportedVolume = 0;
 
-  double get _currentVolume {
-    final kg = double.tryParse(_kgController.text.replaceAll(',', '.')) ?? 0;
-    final reps = int.tryParse(_repsController.text) ?? 0;
-    return kg * reps;
+  double get _effectiveKg =>
+      double.tryParse(_kgController.text.replaceAll(',', '.')) ??
+      double.tryParse(widget.data.placeholderKg ?? '') ??
+      0;
+
+  int get _effectiveReps =>
+      int.tryParse(_repsController.text) ??
+      int.tryParse(widget.data.placeholderReps ?? '') ??
+      0;
+
+  double get _currentVolume => _effectiveKg * _effectiveReps;
+
+  String get _type => switch (_setLabel) {
+    'W' => 'warmup',
+    'F' => 'failure',
+    'D' => 'drop',
+    _ => 'normal',
+  };
+
+  void _notifyChanged() {
+    widget.onChanged(
+      WorkoutSetPayload(
+        type: _type,
+        kg: _effectiveKg,
+        reps: _effectiveReps,
+        completed: _completed && !_removed,
+      ),
+    );
   }
 
   @override
   void initState() {
     super.initState();
+    _clearDefaultsWhenPreviousExists();
     _kgController.addListener(_refreshReportedVolume);
     _repsController.addListener(_refreshReportedVolume);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data.placeholderKg == null &&
+        widget.data.placeholderKg != null) {
+      _clearDefaultsWhenPreviousExists();
+      _notifyChanged();
+    }
+  }
+
+  void _clearDefaultsWhenPreviousExists() {
+    if (widget.data.placeholderKg != null &&
+        _kgController.text == widget.data.kg) {
+      _kgController.clear();
+    }
+    if (widget.data.placeholderReps != null &&
+        _repsController.text == widget.data.reps) {
+      _repsController.clear();
+    }
   }
 
   @override
@@ -3144,13 +3626,16 @@ class _SetRowState extends State<_SetRow> {
       widget.onVolumeChanged(-_reportedVolume);
       _reportedVolume = 0;
     }
+    _notifyChanged();
   }
 
   void _refreshReportedVolume() {
-    if (!_completed) return;
-    final updatedVolume = _currentVolume;
-    widget.onVolumeChanged(updatedVolume - _reportedVolume);
-    _reportedVolume = updatedVolume;
+    if (_completed) {
+      final updatedVolume = _currentVolume;
+      widget.onVolumeChanged(updatedVolume - _reportedVolume);
+      _reportedVolume = updatedVolume;
+    }
+    _notifyChanged();
   }
 
   Future<void> _selectSetType() async {
@@ -3187,6 +3672,7 @@ class _SetRowState extends State<_SetRow> {
           _removed = true;
       }
     });
+    _notifyChanged();
   }
 
   @override
@@ -3227,6 +3713,7 @@ class _SetRowState extends State<_SetRow> {
             child: _InlineNumberField(
               key: ValueKey('kg-${widget.data.set}'),
               controller: _kgController,
+              placeholder: widget.data.placeholderKg,
               decimal: true,
             ),
           ),
@@ -3234,6 +3721,7 @@ class _SetRowState extends State<_SetRow> {
             child: _InlineNumberField(
               key: ValueKey('repeticiones-${widget.data.set}'),
               controller: _repsController,
+              placeholder: widget.data.placeholderReps,
             ),
           ),
           SizedBox(
@@ -3266,10 +3754,12 @@ class _InlineNumberField extends StatelessWidget {
   const _InlineNumberField({
     super.key,
     required this.controller,
+    this.placeholder,
     this.decimal = false,
   });
 
   final TextEditingController controller;
+  final String? placeholder;
   final bool decimal;
 
   @override
@@ -3281,7 +3771,9 @@ class _InlineNumberField extends StatelessWidget {
       selectAllOnFocus: true,
       style: const TextStyle(color: Colors.white, fontSize: 16),
       cursorColor: _accent,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
+        hintText: placeholder,
+        hintStyle: const TextStyle(color: _muted, fontSize: 16),
         isDense: true,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,

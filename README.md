@@ -10,8 +10,10 @@ Stack mínimo:
 ## Historial de entrenamientos
 
 PostgreSQL guarda sesiones, ejercicios y cada serie realizada. La primera
-sesión crea el punto de partida; las siguientes consultan el último peso y las
-repeticiones registradas para completar la columna `Anterior`.
+sesión crea el punto de partida. Después, cada posición de serie mantiene su
+mejor marca: solo cambia cuando aumenta el peso o aumentan las repeticiones.
+Los resultados inferiores permanecen en el historial, pero no reemplazan la
+referencia que aparece en la columna `Anterior`.
 
 Durante el desarrollo se usa el usuario fijo
 `00000000-0000-4000-8000-000000000001`. El esquema ya separa los datos por

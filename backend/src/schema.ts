@@ -23,6 +23,7 @@ export const exercises = pgTable(
     name: text('name').notNull(),
     normalizedName: text('normalized_name').notNull(),
     muscleGroup: text('muscle_group'),
+    restSeconds: integer('rest_seconds').notNull().default(180),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -61,4 +62,53 @@ export const workoutSets = pgTable('workout_sets', {
   weightKg: numeric('weight_kg', { precision: 8, scale: 2 }).notNull(),
   repetitions: integer('repetitions').notNull(),
   completed: boolean('completed').notNull().default(true),
+});
+
+export const exerciseRecords = pgTable(
+  'exercise_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    exerciseId: uuid('exercise_id')
+      .notNull()
+      .references(() => exercises.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    setType: text('set_type').notNull().default('normal'),
+    weightKg: numeric('weight_kg', { precision: 8, scale: 2 }).notNull(),
+    repetitions: integer('repetitions').notNull(),
+    achievedAt: timestamp('achieved_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('exercise_records_exercise_position_idx').on(
+      table.exerciseId,
+      table.position,
+    ),
+  ],
+);
+
+export const routineFolders = pgTable('routine_folders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const routines = pgTable('routines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  folderId: uuid('folder_id')
+    .notNull()
+    .references(() => routineFolders.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull(),
+});
+
+export const routineExercises = pgTable('routine_exercises', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  routineId: uuid('routine_id')
+    .notNull()
+    .references(() => routines.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull(),
 });
