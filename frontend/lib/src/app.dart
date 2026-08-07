@@ -113,7 +113,7 @@ class HelloApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Registrar entrenamiento',
+      title: 'i7l',
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: _page,
@@ -721,6 +721,16 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
   }
 
   Future<void> _editRoutine(int index) async {
+    final active = _activeWorkout.value;
+    if (active != null) {
+      await _openWorkout(
+        exercises: active.exercises,
+        originalExercises: active.originalExercises,
+        routineName: active.routineName,
+        resumeStartedAt: active.startedAt,
+      );
+      return;
+    }
     final routine = widget.routines[index];
     final exercises = await Navigator.of(context).push<List<String>>(
       MaterialPageRoute<List<String>>(
