@@ -9,8 +9,10 @@ void main() {
     await tester.pumpWidget(const HelloApp());
 
     await tester.tap(
-      find.byKey(const ValueKey('eliminar-carpeta-Entrenamiento')),
+      find.byKey(const ValueKey('opciones-carpeta-Entrenamiento')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar carpeta'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirmar-eliminar-carpeta')));
     await tester.pumpAndSettle();
@@ -20,6 +22,30 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('crear-primera-carpeta')));
     await tester.pumpAndSettle();
     expect(find.text('Nueva carpeta'), findsOneWidget);
+  });
+
+  testWidgets('deletes a routine after confirmation', (tester) async {
+    await tester.pumpWidget(const HelloApp());
+    await tester.tap(find.byKey(const ValueKey('carpeta-Entrenamiento')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('crear-rutina')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('nombre-rutina')),
+      'temporal',
+    );
+    await tester.tap(find.text('Crear'));
+    await tester.pumpAndSettle();
+    expect(find.text('Temporal'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('opciones-rutina-Temporal')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar rutina'));
+    await tester.pumpAndSettle();
+    expect(find.text('Eliminar rutina'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirmar-eliminar-rutina')));
+    await tester.pumpAndSettle();
+    expect(find.text('Temporal'), findsNothing);
   });
 
   testWidgets('opens a routine and returns to workout home', (tester) async {
@@ -42,8 +68,23 @@ void main() {
     expect(find.text('Fuerza Semanal'), findsOneWidget);
     expect(find.text('Sin rutinas'), findsOneWidget);
     await tester.tap(
-      find.byKey(const ValueKey('renombrar-carpeta-Fuerza Semanal')),
+      find.byKey(const ValueKey('opciones-carpeta-Fuerza Semanal')),
     );
+    await tester.pumpAndSettle();
+    expect(find.text('Reordenar carpetas'), findsOneWidget);
+    await tester.tap(find.text('Reordenar carpetas'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('arrastrar-carpeta-Fuerza Semanal')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('guardar-orden-carpetas')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('opciones-carpeta-Fuerza Semanal')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cambiar nombre'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('editar-nombre-carpeta')),
@@ -60,14 +101,18 @@ void main() {
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('eliminar-carpeta-Potencia')));
+    await tester.tap(find.byKey(const ValueKey('opciones-carpeta-Potencia')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar carpeta'));
     await tester.pumpAndSettle();
     expect(find.text('Eliminar carpeta'), findsOneWidget);
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
     expect(find.text('Potencia'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('eliminar-carpeta-Potencia')));
+    await tester.tap(find.byKey(const ValueKey('opciones-carpeta-Potencia')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar carpeta'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirmar-eliminar-carpeta')));
     await tester.pumpAndSettle();
@@ -87,8 +132,23 @@ void main() {
     expect(find.text('Tren Superior'), findsOneWidget);
     expect(find.text('Sin ejercicios'), findsWidgets);
     await tester.tap(
-      find.byKey(const ValueKey('renombrar-rutina-Tren Superior')),
+      find.byKey(const ValueKey('opciones-rutina-Tren Superior')),
     );
+    await tester.pumpAndSettle();
+    expect(find.text('Reordenar rutinas'), findsOneWidget);
+    await tester.tap(find.text('Reordenar rutinas'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('arrastrar-rutina-Tren Superior')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('guardar-orden-rutinas')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('opciones-rutina-Tren Superior')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cambiar nombre'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('editar-nombre-rutina')),

@@ -307,6 +307,54 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     });
   }
 
+  Future<void> _openFolderOptions(int index) async {
+    final action = await showModalBottomSheet<_ItemManagementAction>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) =>
+          const _ItemManagementSheet(itemType: 'carpeta', canReorder: true),
+    );
+    if (!mounted || action == null) return;
+    if (action == _ItemManagementAction.reorder) {
+      await _reorderFolders();
+    } else if (action == _ItemManagementAction.rename) {
+      await _renameFolder(index);
+    } else {
+      await _deleteFolder(index);
+    }
+  }
+
+  Future<void> _reorderFolders() async {
+    final folders = await Navigator.of(context).push<List<String>>(
+      MaterialPageRoute<List<String>>(
+        builder: (_) => _ReorderFoldersPage(
+          folders: _folders,
+          routineCounts: {
+            for (final folder in _folders)
+              folder: _folderRoutines[folder]!.length,
+          },
+        ),
+      ),
+    );
+    if (!mounted || folders == null) return;
+    setState(() {
+      final removedFolders = _folders.where(
+        (folder) => !folders.contains(folder),
+      );
+      for (final folder in removedFolders) {
+        _folderRoutines.remove(folder);
+      }
+      _folders
+        ..clear()
+        ..addAll(folders);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -376,23 +424,13 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    key: ValueKey('renombrar-carpeta-$folder'),
-                                    onPressed: () => _renameFolder(index),
-                                    tooltip: 'Cambiar nombre',
+                                    key: ValueKey('opciones-carpeta-$folder'),
+                                    onPressed: () => _openFolderOptions(index),
+                                    tooltip: 'Opciones de carpeta',
                                     icon: const Icon(
-                                      Icons.edit_outlined,
-                                      color: _muted,
-                                      size: 21,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    key: ValueKey('eliminar-carpeta-$folder'),
-                                    onPressed: () => _deleteFolder(index),
-                                    tooltip: 'Eliminar carpeta',
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Color(0xFFFF5C68),
-                                      size: 22,
+                                      Icons.more_vert,
+                                      color: Colors.white,
+                                      size: 24,
                                     ),
                                   ),
                                 ],
@@ -629,6 +667,78 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     });
   }
 
+  Future<void> _deleteRoutine(int index) async {
+    final routine = widget.routines[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.82),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: _border),
+        ),
+        title: const Text('Eliminar rutina'),
+        content: Text(
+          '¿Quieres eliminar “${routine.name}” y todos sus ejercicios?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const ValueKey('confirmar-eliminar-rutina'),
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF5C68),
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() => widget.routines.removeAt(index));
+  }
+
+  Future<void> _openRoutineOptions(int index) async {
+    final action = await showModalBottomSheet<_ItemManagementAction>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) =>
+          const _ItemManagementSheet(itemType: 'rutina', canReorder: true),
+    );
+    if (!mounted || action == null) return;
+    if (action == _ItemManagementAction.reorder) {
+      await _reorderRoutines();
+    } else if (action == _ItemManagementAction.rename) {
+      await _renameRoutine(index);
+    } else {
+      await _deleteRoutine(index);
+    }
+  }
+
+  Future<void> _reorderRoutines() async {
+    final routines = await Navigator.of(context).push<List<_RoutineData>>(
+      MaterialPageRoute<List<_RoutineData>>(
+        builder: (_) => _ReorderRoutinesPage(routines: widget.routines),
+      ),
+    );
+    if (!mounted || routines == null) return;
+    setState(() {
+      widget.routines
+        ..clear()
+        ..addAll(routines);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -656,7 +766,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
                           return _RoutineCard(
                             day: routine.name,
                             exercises: routine.exercises,
-                            onRename: () => _renameRoutine(index),
+                            onOptions: () => _openRoutineOptions(index),
                             onEdit: () => _editRoutine(index),
                             onStart: () => _startRoutine(routine),
                           );
@@ -769,6 +879,56 @@ class _EmptyFolders extends StatelessWidget {
   }
 }
 
+enum _ItemManagementAction { reorder, rename, delete }
+
+class _ItemManagementSheet extends StatelessWidget {
+  const _ItemManagementSheet({required this.itemType, this.canReorder = false});
+
+  final String itemType;
+  final bool canReorder;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canReorder)
+                _ExerciseOption(
+                  icon: Icons.swap_vert,
+                  label: itemType == 'carpeta'
+                      ? 'Reordenar carpetas'
+                      : 'Reordenar rutinas',
+                  onTap: () =>
+                      Navigator.of(context).pop(_ItemManagementAction.reorder),
+                ),
+              _ExerciseOption(
+                icon: Icons.edit_outlined,
+                label: 'Cambiar nombre',
+                onTap: () =>
+                    Navigator.of(context).pop(_ItemManagementAction.rename),
+              ),
+              _ExerciseOption(
+                icon: Icons.delete_outline,
+                label: 'Eliminar $itemType',
+                destructive: true,
+                last: true,
+                onTap: () =>
+                    Navigator.of(context).pop(_ItemManagementAction.delete),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FolderHeader extends StatelessWidget {
   const _FolderHeader({required this.name, required this.onCreateRoutine});
 
@@ -849,14 +1009,14 @@ class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
     required this.day,
     required this.exercises,
-    required this.onRename,
+    required this.onOptions,
     required this.onEdit,
     required this.onStart,
   });
 
   final String day;
   final List<String> exercises;
-  final VoidCallback onRename;
+  final VoidCallback onOptions;
   final VoidCallback onEdit;
   final VoidCallback onStart;
 
@@ -893,9 +1053,9 @@ class _RoutineCard extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        key: ValueKey('renombrar-rutina-$day'),
-                        onPressed: onRename,
-                        tooltip: 'Cambiar nombre',
+                        key: ValueKey('opciones-rutina-$day'),
+                        onPressed: onOptions,
+                        tooltip: 'Opciones de rutina',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints.tightFor(
                           width: 30,
@@ -903,9 +1063,9 @@ class _RoutineCard extends StatelessWidget {
                         ),
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(
-                          Icons.edit_outlined,
-                          color: _muted,
-                          size: 20,
+                          Icons.more_vert,
+                          color: Colors.white,
+                          size: 22,
                         ),
                       ),
                     ],
@@ -2386,6 +2546,232 @@ class _ReorderExercisesPage extends StatefulWidget {
 
   @override
   State<_ReorderExercisesPage> createState() => _ReorderExercisesPageState();
+}
+
+class _ReorderRoutinesPage extends StatefulWidget {
+  const _ReorderRoutinesPage({required this.routines});
+
+  final List<_RoutineData> routines;
+
+  @override
+  State<_ReorderRoutinesPage> createState() => _ReorderRoutinesPageState();
+}
+
+class _ReorderFoldersPage extends StatefulWidget {
+  const _ReorderFoldersPage({
+    required this.folders,
+    required this.routineCounts,
+  });
+
+  final List<String> folders;
+  final Map<String, int> routineCounts;
+
+  @override
+  State<_ReorderFoldersPage> createState() => _ReorderFoldersPageState();
+}
+
+class _ReorderFoldersPageState extends State<_ReorderFoldersPage> {
+  late final List<String> _folders = List.of(widget.folders);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _page,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Container(
+              height: 66,
+              color: _card,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Reordenar carpetas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ReorderableListView.builder(
+                padding: const EdgeInsets.only(top: 10),
+                buildDefaultDragHandles: false,
+                itemCount: _folders.length,
+                onReorderItem: (oldIndex, newIndex) {
+                  setState(() {
+                    final folder = _folders.removeAt(oldIndex);
+                    _folders.insert(newIndex, folder);
+                  });
+                },
+                itemBuilder: (context, index) {
+                  final folder = _folders[index];
+                  final routineCount = widget.routineCounts[folder] ?? 0;
+                  return ListTile(
+                    key: ValueKey('reordenar-carpeta-$folder'),
+                    leading: IconButton(
+                      key: ValueKey('quitar-carpeta-$folder'),
+                      onPressed: () => setState(() => _folders.removeAt(index)),
+                      icon: const Icon(
+                        Icons.remove_circle,
+                        color: Color(0xFFFF5C4D),
+                      ),
+                    ),
+                    title: Text(folder),
+                    subtitle: Text(
+                      routineCount == 0
+                          ? 'Sin rutinas'
+                          : '$routineCount rutinas',
+                      style: const TextStyle(color: _muted),
+                    ),
+                    trailing: ReorderableDragStartListener(
+                      key: ValueKey('arrastrar-carpeta-$folder'),
+                      index: index,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.drag_handle, color: _muted),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                MediaQuery.paddingOf(context).bottom + 16,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton(
+                  key: const ValueKey('guardar-orden-carpetas'),
+                  onPressed: () => Navigator.of(context).pop(_folders),
+                  child: const Text('Listo'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReorderRoutinesPageState extends State<_ReorderRoutinesPage> {
+  late final List<_RoutineData> _routines = List.of(widget.routines);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _page,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Container(
+              height: 66,
+              color: _card,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Reordenar rutinas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ReorderableListView.builder(
+                padding: const EdgeInsets.only(top: 10),
+                buildDefaultDragHandles: false,
+                itemCount: _routines.length,
+                onReorderItem: (oldIndex, newIndex) {
+                  setState(() {
+                    final routine = _routines.removeAt(oldIndex);
+                    _routines.insert(newIndex, routine);
+                  });
+                },
+                itemBuilder: (context, index) {
+                  final routine = _routines[index];
+                  return ListTile(
+                    key: ValueKey('reordenar-rutina-${routine.name}'),
+                    leading: IconButton(
+                      key: ValueKey('quitar-rutina-${routine.name}'),
+                      onPressed: () =>
+                          setState(() => _routines.removeAt(index)),
+                      icon: const Icon(
+                        Icons.remove_circle,
+                        color: Color(0xFFFF5C4D),
+                      ),
+                    ),
+                    title: Text(routine.name),
+                    subtitle: Text(
+                      routine.exercises.isEmpty
+                          ? 'Sin ejercicios'
+                          : '${routine.exercises.length} ejercicios',
+                      style: const TextStyle(color: _muted),
+                    ),
+                    trailing: ReorderableDragStartListener(
+                      key: ValueKey('arrastrar-rutina-${routine.name}'),
+                      index: index,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.drag_handle, color: _muted),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                MediaQuery.paddingOf(context).bottom + 16,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton(
+                  key: const ValueKey('guardar-orden-rutinas'),
+                  onPressed: () => Navigator.of(context).pop(_routines),
+                  child: const Text('Listo'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ReorderExercisesPageState extends State<_ReorderExercisesPage> {
