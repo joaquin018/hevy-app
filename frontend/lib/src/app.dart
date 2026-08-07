@@ -1,0 +1,1920 @@
+import 'dart:async';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+const _accent = Color(0xFF7C8CFF);
+const _page = Color(0xFF090B0F);
+const _card = Color(0xFF11141A);
+const _surface = Color(0xB31C2028);
+const _muted = Color(0xFF9399A6);
+const _border = Color(0x24FFFFFF);
+
+class _AtmosphericBackground extends StatelessWidget {
+  const _AtmosphericBackground({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _page,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: -90,
+                  right: -80,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 65, sigmaY: 65),
+                    child: Container(
+                      width: 260,
+                      height: 260,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF24445A).withValues(alpha: 0.14),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 300,
+                  left: -120,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 85, sigmaY: 85),
+                    child: Container(
+                      width: 300,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF25304A).withValues(alpha: 0.12),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: -130,
+                  bottom: -70,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 95, sigmaY: 95),
+                    child: Container(
+                      width: 320,
+                      height: 320,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF1A3548).withValues(alpha: 0.14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class HelloApp extends StatelessWidget {
+  const HelloApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Registrar entrenamiento',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: _page,
+        colorScheme: const ColorScheme.dark(
+          primary: _accent,
+          surface: _surface,
+        ),
+        fontFamily: 'Roboto',
+        useMaterial3: true,
+      ),
+      home: const WorkoutHomePage(),
+    );
+  }
+}
+
+class WorkoutHomePage extends StatelessWidget {
+  const WorkoutHomePage({super.key});
+
+  static const _routines = [
+    (
+      day: 'Lunes',
+      exercises:
+          'Press Banca Inclinado Con Barra, Fondos, Press Banca Con Barra, Extensión De Tríceps En Polea',
+    ),
+    (
+      day: 'Martes',
+      exercises:
+          'Jalón Al Pecho Agarre Cerrado, Remo En Polea Baja Agarre Neutro, Pullover, Curl De Bíceps En Polea',
+    ),
+    (
+      day: 'Miércoles',
+      exercises:
+          'Sentadilla Libre Con Barra, Extensión De Cuádriceps, Peso Muerto Rumano, Curl De Femoral',
+    ),
+    (
+      day: 'Viernes',
+      exercises:
+          'Press Banca Inclinado Con Barra, Aperturas En Polea Alta, Jalón Al Pecho Agarre Amplio, Remo',
+    ),
+    (
+      day: 'Sábado',
+      exercises:
+          'Elevaciones Laterales, Press Militar, Curl De Bíceps, Extensión De Tríceps',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _AtmosphericBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              const _RoutinesHeader(),
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    18,
+                    18,
+                    MediaQuery.paddingOf(context).bottom + 36,
+                  ),
+                  itemCount: _routines.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 14),
+                  itemBuilder: (context, index) {
+                    final routine = _routines[index];
+                    return _RoutineCard(
+                      day: routine.day,
+                      exercises: routine.exercises,
+                      onStart: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const WorkoutPage(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutinesHeader extends StatelessWidget {
+  const _RoutinesHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 68,
+      color: _card,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: const Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Rutinas',
+              style: TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+          Icon(Icons.create_new_folder_outlined, size: 25, color: _accent),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutineCard extends StatelessWidget {
+  const _RoutineCard({
+    required this.day,
+    required this.exercises,
+    required this.onStart,
+  });
+
+  final String day;
+  final String exercises;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          height: 166,
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+          decoration: BoxDecoration(
+            color: _surface,
+            border: Border.all(color: _border),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      day,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.more_horiz, size: 25),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                exercises,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 15.5,
+                  height: 1.45,
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: _accent,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: FilledButton(
+                    onPressed: onStart,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                    child: const Text(
+                      'Iniciar rutina',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WorkoutPage extends StatefulWidget {
+  const WorkoutPage({super.key});
+
+  @override
+  State<WorkoutPage> createState() => _WorkoutPageState();
+}
+
+class _WorkoutPageState extends State<WorkoutPage> {
+  Timer? _restTicker;
+  Timer? _workoutTicker;
+  int? _remainingSeconds;
+  int _totalSeconds = 1;
+  int _elapsedSeconds = 0;
+  double _totalVolume = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _elapsedSeconds++);
+    });
+  }
+
+  String get _formattedElapsedTime {
+    if (_elapsedSeconds < 60) return '${_elapsedSeconds}s';
+    final hours = _elapsedSeconds ~/ 3600;
+    final minutes = (_elapsedSeconds % 3600) ~/ 60;
+    final seconds = _elapsedSeconds % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:'
+          '${minutes.toString().padLeft(2, '0')}:'
+          '${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String get _formattedVolume {
+    final value = _totalVolume.round().toString();
+    final grouped = value.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
+    return '$grouped kg';
+  }
+
+  void _updateVolume(double difference) {
+    setState(() {
+      _totalVolume = (_totalVolume + difference).clamp(0, double.infinity);
+    });
+  }
+
+  void _startRestTimer(int seconds) {
+    _restTicker?.cancel();
+    setState(() {
+      _totalSeconds = seconds;
+      _remainingSeconds = seconds;
+    });
+    _restTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _remainingSeconds == null) return;
+      if (_remainingSeconds! <= 1) {
+        _skipRestTimer();
+      } else {
+        setState(() => _remainingSeconds = _remainingSeconds! - 1);
+      }
+    });
+  }
+
+  void _adjustTimer(int seconds) {
+    if (_remainingSeconds == null) return;
+    setState(() {
+      _remainingSeconds = (_remainingSeconds! + seconds).clamp(0, 3599);
+      _totalSeconds = _totalSeconds.clamp(_remainingSeconds!, 3599);
+    });
+    if (_remainingSeconds == 0) _skipRestTimer();
+  }
+
+  void _skipRestTimer() {
+    _restTicker?.cancel();
+    if (mounted) setState(() => _remainingSeconds = null);
+  }
+
+  Future<void> _showFinishSheet() {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      showDragHandle: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _FinishWorkoutSheet(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _restTicker?.cancel();
+    _workoutTicker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _AtmosphericBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _WorkoutHeader(
+                onFinish: _showFinishSheet,
+                elapsedTime: _formattedElapsedTime,
+                volume: _formattedVolume,
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 14),
+                      _ExerciseCard(
+                        name: 'Press Banca Inclinado Con Barra',
+                        onSetCompleted: _startRestTimer,
+                        onVolumeChanged: _updateVolume,
+                        sets: const [
+                          _SetData('W', '20kg x 10', '20', '10'),
+                          _SetData('1', '40kg x 6', '40', '6'),
+                          _SetData('2', '50kg x 6', '50', '6'),
+                          _SetData('3', '40kg x 7', '40', '7'),
+                          _SetData('4', '40kg x 5', '40', '5'),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _ExerciseCard(
+                        name: 'Fondos',
+                        onSetCompleted: _startRestTimer,
+                        onVolumeChanged: _updateVolume,
+                        sets: const [
+                          _SetData('1', '0kg x 5', '0', '5'),
+                          _SetData('2', '0kg x 5', '0', '5'),
+                          _SetData('3', '0kg x 4', '0', '4'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton.icon(
+                            key: const ValueKey('agregar-ejercicio'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const AddExercisePage(),
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _accent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            icon: const Icon(Icons.add, size: 23),
+                            label: const Text(
+                              'Agregar ejercicio',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: MediaQuery.paddingOf(context).bottom + 76,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: _remainingSeconds == null
+          ? null
+          : _ActiveRestTimer(
+              remainingSeconds: _remainingSeconds!,
+              totalSeconds: _totalSeconds,
+              onDecrease: () => _adjustTimer(-15),
+              onIncrease: () => _adjustTimer(15),
+            ),
+    );
+  }
+}
+
+class AddExercisePage extends StatelessWidget {
+  const AddExercisePage({super.key});
+
+  static const _exercises = [
+    ('Press Banca Inclinado Con Barra', 'Pecho'),
+    ('Aperturas En Polea Alta', 'Pecho'),
+    ('Dominadas', 'Dorsales'),
+    ('Remo En Polea Baja Agarre Amplio', 'Espalda superior'),
+    ('Elevaciones Laterales En Polea', 'Hombros'),
+    ('Jalón Al Pecho Agarre Cerrado', 'Dorsales'),
+    ('Remo En Polea Baja Agarre Neutro', 'Dorsales'),
+    ('Pullover', 'Dorsales'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _AtmosphericBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _AddExerciseHeader(
+                onCancel: () => Navigator.of(context).pop(),
+                onCreate: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CreateExercisePage(),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Buscar ejercicio',
+                    hintStyle: const TextStyle(color: _muted),
+                    prefixIcon: const Icon(Icons.search, color: _muted),
+                    filled: true,
+                    fillColor: _surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(11),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(17, 24, 17, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Ejercicios recientes',
+                    style: TextStyle(color: _muted, fontSize: 16),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    MediaQuery.paddingOf(context).bottom + 28,
+                  ),
+                  itemCount: _exercises.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 68, color: _border),
+                  itemBuilder: (context, index) {
+                    final exercise = _exercises[index];
+                    return _ExercisePickerRow(
+                      name: exercise.$1,
+                      muscle: exercise.$2,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddExerciseHeader extends StatelessWidget {
+  const _AddExerciseHeader({required this.onCancel, required this.onCreate});
+
+  final VoidCallback onCancel;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 66,
+      color: _card,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onCancel,
+            icon: const Icon(Icons.arrow_back, size: 25),
+          ),
+          const Expanded(
+            child: Text(
+              'Agregar ejercicio',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(onPressed: onCreate, child: const Text('Crear')),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExercisePickerRow extends StatelessWidget {
+  const _ExercisePickerRow({required this.name, required this.muscle});
+
+  final String name;
+  final String muscle;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 82,
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: _surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: _border),
+            ),
+            child: const Icon(Icons.fitness_center, size: 25),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Text(
+                      muscle,
+                      style: const TextStyle(color: _muted, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.trending_up, color: Colors.white, size: 25),
+        ],
+      ),
+    );
+  }
+}
+
+class CreateExercisePage extends StatelessWidget {
+  const CreateExercisePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _AtmosphericBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Container(
+                height: 66,
+                color: _card,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back, size: 25),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Crear ejercicio',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('guardar-ejercicio'),
+                      onPressed: () {},
+                      tooltip: 'Guardar',
+                      icon: const Icon(
+                        LucideIcons.saveCheck,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    28,
+                    24,
+                    MediaQuery.paddingOf(context).bottom + 36,
+                  ),
+                  child: Column(
+                    children: [
+                      const TextField(
+                        key: ValueKey('nombre-ejercicio'),
+                        textCapitalization: TextCapitalization.words,
+                        inputFormatters: [_CapitalizedCaseFormatter()],
+                        style: TextStyle(fontSize: 17),
+                        decoration: InputDecoration(
+                          hintText: 'Nombre del ejercicio',
+                          hintStyle: TextStyle(color: _muted, fontSize: 17),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: _border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: _accent),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const _MuscleGroupField(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CapitalizedCaseFormatter extends TextInputFormatter {
+  const _CapitalizedCaseFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var capitalizeNext = true;
+    final buffer = StringBuffer();
+    for (final rune in newValue.text.toLowerCase().runes) {
+      final character = String.fromCharCode(rune);
+      if (capitalizeNext && RegExp(r'[a-záéíóúüñ]').hasMatch(character)) {
+        buffer.write(character.toUpperCase());
+        capitalizeNext = false;
+      } else {
+        buffer.write(character);
+      }
+      if (RegExp(r'\s').hasMatch(character)) capitalizeNext = true;
+    }
+
+    return newValue.copyWith(text: buffer.toString());
+  }
+}
+
+class _MuscleGroupField extends StatefulWidget {
+  const _MuscleGroupField();
+
+  @override
+  State<_MuscleGroupField> createState() => _MuscleGroupFieldState();
+}
+
+class _MuscleGroupFieldState extends State<_MuscleGroupField> {
+  String? _selectedGroup;
+
+  Future<void> _openSelector() async {
+    final group = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      showDragHandle: false,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _MuscleGroupSheet(),
+    );
+    if (group != null && mounted) setState(() => _selectedGroup = group);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: const ValueKey('grupo-muscular-principal'),
+      onTap: _openSelector,
+      child: Container(
+        height: 82,
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: _border)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Grupo Muscular Principal',
+                    style: TextStyle(fontSize: 15),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _selectedGroup ?? 'Seleccionar',
+                    style: const TextStyle(color: _accent, fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: _muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MuscleGroupSheet extends StatefulWidget {
+  const _MuscleGroupSheet();
+
+  @override
+  State<_MuscleGroupSheet> createState() => _MuscleGroupSheetState();
+}
+
+class _MuscleGroupSheetState extends State<_MuscleGroupSheet> {
+  static const _groups = [
+    'Abdominales',
+    'Abductores',
+    'Aductores',
+    'Bíceps',
+    'Pantorrillas',
+    'Pecho',
+    'Antebrazos',
+    'Glúteos',
+    'Isquiotibiales',
+    'Dorsales',
+    'Zona Lumbar',
+    'Cuello',
+    'Cuádriceps',
+    'Hombros',
+    'Trapecios',
+    'Tríceps',
+    'Espalda Superior',
+  ];
+
+  final _otherController = TextEditingController();
+
+  @override
+  void dispose() {
+    _otherController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.78,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const ColoredBox(
+              color: _card,
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: Center(
+                  child: Text(
+                    'Grupo Muscular Principal',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ClipRect(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (final group in _groups)
+                      ListTile(
+                        title: Text(group),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: _muted,
+                        ),
+                        onTap: () => Navigator.of(context).pop(group),
+                      ),
+                    const SizedBox(height: 16),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Otro',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      key: const ValueKey('otro-grupo-muscular'),
+                      controller: _otherController,
+                      decoration: InputDecoration(
+                        hintText: 'Escribe Otro Grupo Muscular',
+                        hintStyle: const TextStyle(color: _muted),
+                        filled: true,
+                        fillColor: _surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(11),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: const [_CapitalizedCaseFormatter()],
+                      onSubmitted: _submitOther,
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton(
+                      onPressed: () => _submitOther(_otherController.text),
+                      child: const Text('Usar Este Grupo'),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submitOther(String value) {
+    final group = value.trim();
+    if (group.isNotEmpty) Navigator.of(context).pop(group);
+  }
+}
+
+class _WorkoutHeader extends StatelessWidget {
+  const _WorkoutHeader({
+    required this.onFinish,
+    required this.elapsedTime,
+    required this.volume,
+  });
+
+  final VoidCallback onFinish;
+  final String elapsedTime;
+  final String volume;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      decoration: const BoxDecoration(
+        color: _card,
+        border: Border(bottom: BorderSide(color: _border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 40),
+            icon: const Icon(Icons.arrow_back, size: 25),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _Metric(
+                    label: 'Duración',
+                    value: elapsedTime,
+                    blue: true,
+                  ),
+                ),
+                Expanded(
+                  child: _Metric(label: 'Volumen', value: volume),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          IconButton(
+            key: const ValueKey('finalizar-entrenamiento'),
+            onPressed: onFinish,
+            tooltip: 'Finalizar',
+            icon: const Icon(
+              LucideIcons.checkCheck,
+              color: Colors.white,
+              size: 27,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FinishWorkoutSheet extends StatelessWidget {
+  const _FinishWorkoutSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: _border),
+              ),
+              child: const Icon(Icons.assignment_outlined, size: 30),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Actualizar «Lunes»',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Añadiste 1 ejercicio.',
+              style: TextStyle(color: _muted, fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                ),
+                child: const Text(
+                  'Actualizar rutina',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _surface,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                ),
+                child: const Text(
+                  'Mantener rutina original',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Metric extends StatelessWidget {
+  const _Metric({required this.label, required this.value, this.blue = false});
+
+  final String label;
+  final String value;
+  final bool blue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(color: blue ? _accent : Colors.white, fontSize: 16),
+        ),
+      ],
+    );
+  }
+}
+
+class _SetData {
+  const _SetData(this.set, this.previous, this.kg, this.reps);
+
+  final String set;
+  final String previous;
+  final String kg;
+  final String reps;
+}
+
+class _ExerciseCard extends StatefulWidget {
+  const _ExerciseCard({
+    required this.name,
+    required this.sets,
+    required this.onSetCompleted,
+    required this.onVolumeChanged,
+  });
+
+  final String name;
+  final List<_SetData> sets;
+  final ValueChanged<int> onSetCompleted;
+  final ValueChanged<double> onVolumeChanged;
+
+  @override
+  State<_ExerciseCard> createState() => _ExerciseCardState();
+}
+
+class _ExerciseCardState extends State<_ExerciseCard> {
+  int _restMinutes = 3;
+  late final List<_SetData> _sets = List.of(widget.sets);
+
+  void _addSet() {
+    final numbers = _sets.map((set) => int.tryParse(set.set)).whereType<int>();
+    final nextNumber = numbers.isEmpty
+        ? 1
+        : numbers.reduce(
+                (current, value) => value > current ? value : current,
+              ) +
+              1;
+    setState(() {
+      _sets.add(_SetData('$nextNumber', '—', '0', '0'));
+    });
+  }
+
+  Future<void> _openExerciseOptions() {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => const _ExerciseOptionsSheet(),
+    );
+  }
+
+  Future<void> _openRestTimer(BuildContext context) async {
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      showDragHandle: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => _RestTimerSheet(
+        exerciseName: widget.name,
+        initialMinutes: _restMinutes,
+      ),
+    );
+    if (minutes != null && mounted) {
+      setState(() => _restMinutes = minutes);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.all(Radius.circular(20)),
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.only(top: 18, bottom: 16),
+      foregroundDecoration: BoxDecoration(
+        border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    style: const TextStyle(color: _accent, fontSize: 18),
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('temporizador-${widget.name}'),
+                  onPressed: () => _openRestTimer(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 34,
+                    height: 38,
+                  ),
+                  icon: const Icon(
+                    Icons.timer_outlined,
+                    color: _accent,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                IconButton(
+                  key: ValueKey('opciones-${widget.name}'),
+                  onPressed: _openExerciseOptions,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 38,
+                  ),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 15),
+          const _SetHeader(),
+          const SizedBox(height: 3),
+          for (var index = 0; index < _sets.length; index++)
+            _SetRow(
+              data: _sets[index],
+              onCompleted: () => widget.onSetCompleted(_restMinutes * 60),
+              onVolumeChanged: widget.onVolumeChanged,
+            ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: InkWell(
+              key: ValueKey('añadir-serie-${widget.name}'),
+              onTap: _addSet,
+              borderRadius: BorderRadius.circular(11),
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add, size: 22),
+                    SizedBox(width: 7),
+                    Text('Añadir serie', style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExerciseOptionsSheet extends StatelessWidget {
+  const _ExerciseOptionsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ExerciseOption(
+                icon: Icons.swap_vert,
+                label: 'Reordenar ejercicios',
+              ),
+              _ExerciseOption(icon: Icons.sync, label: 'Reemplazar ejercicio'),
+              _ExerciseOption(
+                icon: Icons.close,
+                label: 'Eliminar ejercicio',
+                destructive: true,
+                last: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExerciseOption extends StatelessWidget {
+  const _ExerciseOption({
+    required this.icon,
+    required this.label,
+    this.destructive = false,
+    this.last = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool destructive;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? const Color(0xFFFF5C68) : Colors.white;
+    return Material(
+      color: _surface,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(),
+        child: Container(
+          height: 66,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : const Border(bottom: BorderSide(color: _border)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 25),
+              const SizedBox(width: 18),
+              Text(label, style: TextStyle(color: color, fontSize: 16)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RestTimerSheet extends StatefulWidget {
+  const _RestTimerSheet({
+    required this.exerciseName,
+    required this.initialMinutes,
+  });
+
+  final String exerciseName;
+  final int initialMinutes;
+
+  @override
+  State<_RestTimerSheet> createState() => _RestTimerSheetState();
+}
+
+class _RestTimerSheetState extends State<_RestTimerSheet> {
+  late final _scrollController = FixedExtentScrollController(
+    initialItem: widget.initialMinutes - 1,
+  );
+  late int _selectedMinutes = widget.initialMinutes;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Temporizador de descanso',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              widget.exerciseName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: _muted, fontSize: 15),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 210,
+              child: ListWheelScrollView.useDelegate(
+                controller: _scrollController,
+                itemExtent: 48,
+                diameterRatio: 1.6,
+                physics: const FixedExtentScrollPhysics(),
+                onSelectedItemChanged: (index) {
+                  setState(() => _selectedMinutes = index + 1);
+                },
+                childDelegate: ListWheelChildBuilderDelegate(
+                  childCount: 5,
+                  builder: (context, index) {
+                    final minutes = index + 1;
+                    final selected = minutes == _selectedMinutes;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      alignment: Alignment.center,
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: selected ? _surface : Colors.transparent,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Text(
+                        '$minutes min',
+                        style: TextStyle(
+                          color: selected ? Colors.white : _muted,
+                          fontSize: selected ? 20 : 17,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 43,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(_selectedMinutes),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Listo', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SetHeader extends StatelessWidget {
+  const _SetHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(color: _muted, fontSize: 13);
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          SizedBox(width: 58, child: Text('SET', style: style)),
+          Expanded(flex: 3, child: Text('ANTERIOR', style: style)),
+          Expanded(flex: 2, child: Text('KG', style: style)),
+          Expanded(child: Text('REP', style: style)),
+          SizedBox(
+            width: 33,
+            child: Icon(Icons.check, color: _muted, size: 21),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _SetType { warmup, normal, failure, drop, remove }
+
+class _SetRow extends StatefulWidget {
+  const _SetRow({
+    required this.data,
+    required this.onCompleted,
+    required this.onVolumeChanged,
+  });
+
+  final _SetData data;
+  final VoidCallback onCompleted;
+  final ValueChanged<double> onVolumeChanged;
+
+  @override
+  State<_SetRow> createState() => _SetRowState();
+}
+
+class _SetRowState extends State<_SetRow> {
+  late String _setLabel = widget.data.set;
+  late Color _setColor = widget.data.set == 'W' ? _accent : Colors.white;
+  late final TextEditingController _kgController = TextEditingController(
+    text: widget.data.kg,
+  );
+  late final TextEditingController _repsController = TextEditingController(
+    text: widget.data.reps,
+  );
+  bool _removed = false;
+  bool _completed = false;
+  double _reportedVolume = 0;
+
+  double get _currentVolume {
+    final kg = double.tryParse(_kgController.text.replaceAll(',', '.')) ?? 0;
+    final reps = int.tryParse(_repsController.text) ?? 0;
+    return kg * reps;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _kgController.addListener(_refreshReportedVolume);
+    _repsController.addListener(_refreshReportedVolume);
+  }
+
+  @override
+  void dispose() {
+    _kgController.removeListener(_refreshReportedVolume);
+    _repsController.removeListener(_refreshReportedVolume);
+    _kgController.dispose();
+    _repsController.dispose();
+    super.dispose();
+  }
+
+  void _toggleCompleted() {
+    setState(() => _completed = !_completed);
+    if (_completed) {
+      _reportedVolume = _currentVolume;
+      widget.onVolumeChanged(_reportedVolume);
+      widget.onCompleted();
+    } else {
+      widget.onVolumeChanged(-_reportedVolume);
+      _reportedVolume = 0;
+    }
+  }
+
+  void _refreshReportedVolume() {
+    if (!_completed) return;
+    final updatedVolume = _currentVolume;
+    widget.onVolumeChanged(updatedVolume - _reportedVolume);
+    _reportedVolume = updatedVolume;
+  }
+
+  Future<void> _selectSetType() async {
+    final type = await showModalBottomSheet<_SetType>(
+      context: context,
+      backgroundColor: _card,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      showDragHandle: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => const _SetTypeSheet(),
+    );
+
+    if (type == null || !mounted) return;
+    setState(() {
+      switch (type) {
+        case _SetType.warmup:
+          _setLabel = 'W';
+          _setColor = _accent;
+        case _SetType.normal:
+          _setLabel = widget.data.set == 'W' ? '1' : widget.data.set;
+          _setColor = Colors.white;
+        case _SetType.failure:
+          _setLabel = 'F';
+          _setColor = const Color(0xFFFF453A);
+        case _SetType.drop:
+          _setLabel = 'D';
+          _setColor = const Color(0xFF35C8FF);
+        case _SetType.remove:
+          if (_completed) widget.onVolumeChanged(-_reportedVolume);
+          _reportedVolume = 0;
+          _removed = true;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_removed) return const SizedBox.shrink();
+    return Container(
+      height: 50,
+      color: Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 58,
+            child: InkWell(
+              onTap: _selectSetType,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _setLabel,
+                  style: TextStyle(
+                    color: _setColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              widget.data.previous,
+              style: const TextStyle(color: _muted, fontSize: 16),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: _InlineNumberField(
+              key: ValueKey('kg-${widget.data.set}'),
+              controller: _kgController,
+              decimal: true,
+            ),
+          ),
+          Expanded(
+            child: _InlineNumberField(
+              key: ValueKey('repeticiones-${widget.data.set}'),
+              controller: _repsController,
+            ),
+          ),
+          SizedBox(
+            width: 33,
+            child: InkWell(
+              key: ValueKey('checkbox-${widget.data.set}'),
+              onTap: _toggleCompleted,
+              borderRadius: BorderRadius.circular(11),
+              child: Container(
+                width: 25,
+                height: 25,
+                decoration: BoxDecoration(
+                  color: _completed ? _accent : _surface,
+                  border: _completed ? null : Border.all(color: _border),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: _completed
+                    ? const Icon(Icons.check, color: Colors.white, size: 18)
+                    : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineNumberField extends StatelessWidget {
+  const _InlineNumberField({
+    super.key,
+    required this.controller,
+    this.decimal = false,
+  });
+
+  final TextEditingController controller;
+  final bool decimal;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+      textInputAction: TextInputAction.next,
+      selectAllOnFocus: true,
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+      cursorColor: _accent,
+      decoration: const InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: EdgeInsets.symmetric(vertical: 10),
+      ),
+    );
+  }
+}
+
+class _ActiveRestTimer extends StatelessWidget {
+  const _ActiveRestTimer({
+    required this.remainingSeconds,
+    required this.totalSeconds,
+    required this.onDecrease,
+    required this.onIncrease,
+  });
+
+  final int remainingSeconds;
+  final int totalSeconds;
+  final VoidCallback onDecrease;
+  final VoidCallback onIncrease;
+
+  String get _formattedTime {
+    final minutes = remainingSeconds ~/ 60;
+    final seconds = remainingSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (remainingSeconds / totalSeconds).clamp(0.0, 1.0);
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 88,
+        decoration: const BoxDecoration(color: _card),
+        child: Column(
+          children: [
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              color: _accent,
+              backgroundColor: _surface,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    _TimerAdjustButton(label: '-15', onTap: onDecrease),
+                    Expanded(
+                      child: Text(
+                        _formattedTime,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 29,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    _TimerAdjustButton(label: '+15', onTap: onIncrease),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimerAdjustButton extends StatelessWidget {
+  const _TimerAdjustButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 40,
+      child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          backgroundColor: _surface,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 16)),
+      ),
+    );
+  }
+}
+
+class _SetTypeSheet extends StatelessWidget {
+  const _SetTypeSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 20),
+              child: Text(
+                'Seleccionar tipo de serie',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: const Column(
+                children: [
+                  _SetTypeOption(
+                    type: _SetType.warmup,
+                    symbol: 'W',
+                    label: 'Serie de calentamiento',
+                    color: _accent,
+                  ),
+                  _SetTypeOption(
+                    type: _SetType.normal,
+                    symbol: '1',
+                    label: 'Serie normal',
+                  ),
+                  _SetTypeOption(
+                    type: _SetType.failure,
+                    symbol: 'F',
+                    label: 'Serie al fallo',
+                    color: Color(0xFFFF453A),
+                  ),
+                  _SetTypeOption(
+                    type: _SetType.drop,
+                    symbol: 'D',
+                    label: 'Drop Set',
+                    color: Color(0xFF35C8FF),
+                  ),
+                  _SetTypeOption(
+                    type: _SetType.remove,
+                    symbol: '×',
+                    label: 'Eliminar serie',
+                    color: Color(0xFFFF453A),
+                    last: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SetTypeOption extends StatelessWidget {
+  const _SetTypeOption({
+    required this.type,
+    required this.symbol,
+    required this.label,
+    this.color = Colors.white,
+    this.last = false,
+  });
+
+  final _SetType type;
+  final String symbol;
+  final String label;
+  final Color color;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => Navigator.of(context).pop(type),
+      child: Container(
+        height: 65,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : const Border(bottom: BorderSide(color: _border)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 37,
+              child: Text(
+                symbol,
+                style: TextStyle(
+                  color: color,
+                  fontSize: symbol == '×' ? 27 : 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
+          ],
+        ),
+      ),
+    );
+  }
+}
