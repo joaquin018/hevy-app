@@ -38,6 +38,16 @@ void main() {
     expect(find.text('Sin ejercicios'), findsOneWidget);
     expect(find.text('Lunes'), findsOneWidget);
     expect(find.text('Iniciar rutina'), findsWidgets);
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('editar-rutina-Lunes')));
+    await tester.pumpAndSettle();
+    expect(find.text('Editar Lunes'), findsOneWidget);
+    expect(find.byKey(const ValueKey('guardar-rutina')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('2s'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('guardar-rutina')));
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('iniciar-rutina-Tren Superior')),
@@ -84,6 +94,47 @@ void main() {
     expect(find.text('Add To Superset'), findsNothing);
     await tester.tap(find.text('Reordenar ejercicios'));
     await tester.pumpAndSettle();
+    expect(find.text('Reordenar ejercicios'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quitar-Fondos')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('arrastrar-Fondos')),
+      const Offset(0, -90),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('guardar-orden-ejercicios')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('opciones-Fondos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reemplazar ejercicio'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reemplazar ejercicio'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('seleccionar-Dominadas')));
+    await tester.pumpAndSettle();
+    expect(find.text('Fondos'), findsNothing);
+    expect(find.text('Dominadas'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('opciones-Dominadas')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar ejercicio'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('¿Quieres eliminar “Dominadas” de esta rutina?'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dominadas'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('opciones-Dominadas')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar ejercicio'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('confirmar-eliminar-ejercicio')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Dominadas'), findsNothing);
 
     await tester.tap(
       find.byKey(
