@@ -8,10 +8,48 @@ void main() {
 
     expect(find.text('Rutinas'), findsOneWidget);
     expect(find.byIcon(Icons.create_new_folder_outlined), findsOneWidget);
+    expect(find.text('Entrenamiento'), findsOneWidget);
+    expect(find.text('5 rutinas'), findsOneWidget);
+    expect(find.text('Lunes'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('crear-carpeta')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('nombre-carpeta')),
+      'fuerza semanal',
+    );
+    await tester.tap(find.text('Crear'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fuerza Semanal'), findsOneWidget);
+    expect(find.text('Sin rutinas'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('carpeta-Entrenamiento')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('crear-rutina')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('crear-rutina')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('nombre-rutina')),
+      'tren superior',
+    );
+    await tester.tap(find.text('Crear'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tren Superior'), findsOneWidget);
+    expect(find.text('Sin ejercicios'), findsOneWidget);
     expect(find.text('Lunes'), findsOneWidget);
     expect(find.text('Iniciar rutina'), findsWidgets);
 
-    await tester.tap(find.text('Iniciar rutina').first);
+    await tester.tap(
+      find.byKey(const ValueKey('iniciar-rutina-Tren Superior')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Press Banca Inclinado Con Barra'), findsNothing);
+    expect(find.text('Fondos'), findsNothing);
+    expect(find.text('Agregar ejercicio'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('iniciar-rutina-Lunes')));
     await tester.pumpAndSettle();
 
     expect(find.text('0s'), findsOneWidget);
@@ -120,10 +158,18 @@ void main() {
     await tester.tap(find.text('Pecho'));
     await tester.pumpAndSettle();
     expect(find.text('Pecho'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.tap(find.byKey(const ValueKey('guardar-ejercicio')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    expect(find.text('Press Banca Inclinado'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('seleccionar-Press Banca Inclinado')),
+    );
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('ejercicio-activo-Press Banca Inclinado')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();

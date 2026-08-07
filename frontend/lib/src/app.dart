@@ -106,36 +106,87 @@ class HelloApp extends StatelessWidget {
   }
 }
 
-class WorkoutHomePage extends StatelessWidget {
+class WorkoutHomePage extends StatefulWidget {
   const WorkoutHomePage({super.key});
 
-  static const _routines = [
-    (
-      day: 'Lunes',
-      exercises:
-          'Press Banca Inclinado Con Barra, Fondos, Press Banca Con Barra, Extensión De Tríceps En Polea',
-    ),
-    (
-      day: 'Martes',
-      exercises:
-          'Jalón Al Pecho Agarre Cerrado, Remo En Polea Baja Agarre Neutro, Pullover, Curl De Bíceps En Polea',
-    ),
-    (
-      day: 'Miércoles',
-      exercises:
-          'Sentadilla Libre Con Barra, Extensión De Cuádriceps, Peso Muerto Rumano, Curl De Femoral',
-    ),
-    (
-      day: 'Viernes',
-      exercises:
-          'Press Banca Inclinado Con Barra, Aperturas En Polea Alta, Jalón Al Pecho Agarre Amplio, Remo',
-    ),
-    (
-      day: 'Sábado',
-      exercises:
-          'Elevaciones Laterales, Press Militar, Curl De Bíceps, Extensión De Tríceps',
-    ),
-  ];
+  @override
+  State<WorkoutHomePage> createState() => _WorkoutHomePageState();
+}
+
+class _RoutineData {
+  const _RoutineData(this.name, this.exercises);
+
+  final String name;
+  final String exercises;
+}
+
+const _initialRoutines = [
+  _RoutineData(
+    'Lunes',
+    'Press Banca Inclinado Con Barra, Fondos, Press Banca Con Barra, Extensión De Tríceps En Polea',
+  ),
+  _RoutineData(
+    'Martes',
+    'Jalón Al Pecho Agarre Cerrado, Remo En Polea Baja Agarre Neutro, Pullover, Curl De Bíceps En Polea',
+  ),
+  _RoutineData(
+    'Miércoles',
+    'Sentadilla Libre Con Barra, Extensión De Cuádriceps, Peso Muerto Rumano, Curl De Femoral',
+  ),
+  _RoutineData(
+    'Viernes',
+    'Press Banca Inclinado Con Barra, Aperturas En Polea Alta, Jalón Al Pecho Agarre Amplio, Remo',
+  ),
+  _RoutineData(
+    'Sábado',
+    'Elevaciones Laterales, Press Militar, Curl De Bíceps, Extensión De Tríceps',
+  ),
+];
+
+class _WorkoutHomePageState extends State<WorkoutHomePage> {
+  final List<String> _folders = ['Entrenamiento'];
+  final Map<String, List<_RoutineData>> _folderRoutines = {
+    'Entrenamiento': List<_RoutineData>.of(_initialRoutines),
+  };
+
+  Future<void> _createFolder() async {
+    var folderName = '';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nueva carpeta'),
+        content: TextField(
+          key: const ValueKey('nombre-carpeta'),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          inputFormatters: const [_CapitalizedCaseFormatter()],
+          decoration: const InputDecoration(hintText: 'Nombre de la carpeta'),
+          onChanged: (value) => folderName = value,
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = folderName.trim();
+              if (name.isNotEmpty) Navigator.pop(context, name);
+            },
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null) return;
+    setState(() {
+      _folders.add(name);
+      _folderRoutines[name] = [];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +196,7 @@ class WorkoutHomePage extends StatelessWidget {
           bottom: false,
           child: Column(
             children: [
-              const _RoutinesHeader(),
+              _RoutinesHeader(onCreateFolder: _createFolder),
               Expanded(
                 child: ListView.separated(
                   padding: EdgeInsets.fromLTRB(
@@ -154,16 +205,148 @@ class WorkoutHomePage extends StatelessWidget {
                     18,
                     MediaQuery.paddingOf(context).bottom + 36,
                   ),
-                  itemCount: _routines.length,
+                  itemCount: _folders.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final folder = _folders[index];
+                    return Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        key: ValueKey('carpeta-$folder'),
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => _RoutineFolderPage(
+                                name: folder,
+                                routines: _folderRoutines[folder]!,
+                              ),
+                            ),
+                          );
+                          if (mounted) setState(() {});
+                        },
+                        tileColor: _surface,
+                        shape: RoundedRectangleBorder(
+                          side: const BorderSide(color: _border),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 12,
+                        ),
+                        leading: const Icon(
+                          Icons.folder_outlined,
+                          color: _accent,
+                          size: 30,
+                        ),
+                        title: Text(
+                          folder,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _folderRoutines[folder]!.isEmpty
+                              ? 'Sin rutinas'
+                              : '${_folderRoutines[folder]!.length} rutinas',
+                          style: const TextStyle(color: _muted),
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: _muted,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutineFolderPage extends StatefulWidget {
+  const _RoutineFolderPage({required this.name, required this.routines});
+
+  final String name;
+  final List<_RoutineData> routines;
+
+  @override
+  State<_RoutineFolderPage> createState() => _RoutineFolderPageState();
+}
+
+class _RoutineFolderPageState extends State<_RoutineFolderPage> {
+  Future<void> _createRoutine() async {
+    var routineName = '';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nueva rutina'),
+        content: TextField(
+          key: const ValueKey('nombre-rutina'),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          inputFormatters: const [_CapitalizedCaseFormatter()],
+          decoration: const InputDecoration(hintText: 'Nombre de la rutina'),
+          onChanged: (value) => routineName = value,
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = routineName.trim();
+              if (name.isNotEmpty) Navigator.pop(context, name);
+            },
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null) return;
+    setState(
+      () => widget.routines.insert(0, _RoutineData(name, 'Sin ejercicios')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _AtmosphericBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _FolderHeader(name: widget.name, onCreateRoutine: _createRoutine),
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    18,
+                    18,
+                    MediaQuery.paddingOf(context).bottom + 36,
+                  ),
+                  itemCount: widget.routines.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 14),
                   itemBuilder: (context, index) {
-                    final routine = _routines[index];
+                    final routine = widget.routines[index];
                     return _RoutineCard(
-                      day: routine.day,
+                      day: routine.name,
                       exercises: routine.exercises,
                       onStart: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => const WorkoutPage(),
+                          builder: (_) => WorkoutPage(
+                            initiallyEmpty:
+                                routine.exercises == 'Sin ejercicios',
+                          ),
                         ),
                       ),
                     );
@@ -179,7 +362,9 @@ class WorkoutHomePage extends StatelessWidget {
 }
 
 class _RoutinesHeader extends StatelessWidget {
-  const _RoutinesHeader();
+  const _RoutinesHeader({required this.onCreateFolder});
+
+  final VoidCallback onCreateFolder;
 
   @override
   Widget build(BuildContext context) {
@@ -187,9 +372,9 @@ class _RoutinesHeader extends StatelessWidget {
       height: 68,
       color: _card,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: const Row(
+      child: Row(
         children: [
-          Expanded(
+          const Expanded(
             child: Text(
               'Rutinas',
               style: TextStyle(
@@ -199,7 +384,51 @@ class _RoutinesHeader extends StatelessWidget {
               ),
             ),
           ),
-          Icon(Icons.create_new_folder_outlined, size: 25, color: _accent),
+          IconButton(
+            key: const ValueKey('crear-carpeta'),
+            onPressed: onCreateFolder,
+            icon: const Icon(
+              Icons.create_new_folder_outlined,
+              size: 25,
+              color: _accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FolderHeader extends StatelessWidget {
+  const _FolderHeader({required this.name, required this.onCreateRoutine});
+
+  final String name;
+  final VoidCallback onCreateRoutine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 68,
+      color: _card,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('crear-rutina'),
+            onPressed: onCreateRoutine,
+            tooltip: 'Crear rutina',
+            icon: const Icon(Icons.add, color: _accent, size: 27),
+          ),
         ],
       ),
     );
@@ -269,6 +498,7 @@ class _RoutineCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(13),
                   ),
                   child: FilledButton(
+                    key: ValueKey('iniciar-rutina-$day'),
                     onPressed: onStart,
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.transparent,
@@ -296,7 +526,9 @@ class _RoutineCard extends StatelessWidget {
 }
 
 class WorkoutPage extends StatefulWidget {
-  const WorkoutPage({super.key});
+  const WorkoutPage({super.key, this.initiallyEmpty = false});
+
+  final bool initiallyEmpty;
 
   @override
   State<WorkoutPage> createState() => _WorkoutPageState();
@@ -309,6 +541,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
   int _totalSeconds = 1;
   int _elapsedSeconds = 0;
   double _totalVolume = 0;
+  final List<String> _addedExercises = [];
 
   @override
   void initState() {
@@ -345,6 +578,14 @@ class _WorkoutPageState extends State<WorkoutPage> {
     setState(() {
       _totalVolume = (_totalVolume + difference).clamp(0, double.infinity);
     });
+  }
+
+  Future<void> _openExercisePicker() async {
+    final exercise = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => const AddExercisePage()),
+    );
+    if (!mounted || exercise == null) return;
+    setState(() => _addedExercises.add(exercise));
   }
 
   void _startRestTimer(int seconds) {
@@ -416,29 +657,41 @@ class _WorkoutPageState extends State<WorkoutPage> {
                   child: Column(
                     children: [
                       const SizedBox(height: 14),
-                      _ExerciseCard(
-                        name: 'Press Banca Inclinado Con Barra',
-                        onSetCompleted: _startRestTimer,
-                        onVolumeChanged: _updateVolume,
-                        sets: const [
-                          _SetData('W', '20kg x 10', '20', '10'),
-                          _SetData('1', '40kg x 6', '40', '6'),
-                          _SetData('2', '50kg x 6', '50', '6'),
-                          _SetData('3', '40kg x 7', '40', '7'),
-                          _SetData('4', '40kg x 5', '40', '5'),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _ExerciseCard(
-                        name: 'Fondos',
-                        onSetCompleted: _startRestTimer,
-                        onVolumeChanged: _updateVolume,
-                        sets: const [
-                          _SetData('1', '0kg x 5', '0', '5'),
-                          _SetData('2', '0kg x 5', '0', '5'),
-                          _SetData('3', '0kg x 4', '0', '4'),
-                        ],
-                      ),
+                      if (!widget.initiallyEmpty) ...[
+                        _ExerciseCard(
+                          name: 'Press Banca Inclinado Con Barra',
+                          onSetCompleted: _startRestTimer,
+                          onVolumeChanged: _updateVolume,
+                          sets: const [
+                            _SetData('W', '20kg x 10', '20', '10'),
+                            _SetData('1', '40kg x 6', '40', '6'),
+                            _SetData('2', '50kg x 6', '50', '6'),
+                            _SetData('3', '40kg x 7', '40', '7'),
+                            _SetData('4', '40kg x 5', '40', '5'),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _ExerciseCard(
+                          name: 'Fondos',
+                          onSetCompleted: _startRestTimer,
+                          onVolumeChanged: _updateVolume,
+                          sets: const [
+                            _SetData('1', '0kg x 5', '0', '5'),
+                            _SetData('2', '0kg x 5', '0', '5'),
+                            _SetData('3', '0kg x 4', '0', '4'),
+                          ],
+                        ),
+                      ],
+                      for (final exercise in _addedExercises) ...[
+                        const SizedBox(height: 12),
+                        _ExerciseCard(
+                          key: ValueKey('ejercicio-activo-$exercise'),
+                          name: exercise,
+                          onSetCompleted: _startRestTimer,
+                          onVolumeChanged: _updateVolume,
+                          sets: const [_SetData('1', '—', '0', '0')],
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -447,11 +700,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
                           height: 48,
                           child: FilledButton.icon(
                             key: const ValueKey('agregar-ejercicio'),
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const AddExercisePage(),
-                              ),
-                            ),
+                            onPressed: _openExercisePicker,
                             style: FilledButton.styleFrom(
                               backgroundColor: _accent,
                               foregroundColor: Colors.white,
@@ -493,10 +742,15 @@ class _WorkoutPageState extends State<WorkoutPage> {
   }
 }
 
-class AddExercisePage extends StatelessWidget {
+class AddExercisePage extends StatefulWidget {
   const AddExercisePage({super.key});
 
-  static const _exercises = [
+  @override
+  State<AddExercisePage> createState() => _AddExercisePageState();
+}
+
+class _AddExercisePageState extends State<AddExercisePage> {
+  final List<(String, String)> _exercises = [
     ('Press Banca Inclinado Con Barra', 'Pecho'),
     ('Aperturas En Polea Alta', 'Pecho'),
     ('Dominadas', 'Dorsales'),
@@ -506,6 +760,16 @@ class AddExercisePage extends StatelessWidget {
     ('Remo En Polea Baja Agarre Neutro', 'Dorsales'),
     ('Pullover', 'Dorsales'),
   ];
+
+  Future<void> _createExercise() async {
+    final exercise = await Navigator.of(context).push<(String, String)>(
+      MaterialPageRoute<(String, String)>(
+        builder: (_) => const CreateExercisePage(),
+      ),
+    );
+    if (!mounted || exercise == null) return;
+    setState(() => _exercises.insert(0, exercise));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -517,11 +781,7 @@ class AddExercisePage extends StatelessWidget {
             children: [
               _AddExerciseHeader(
                 onCancel: () => Navigator.of(context).pop(),
-                onCreate: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const CreateExercisePage(),
-                  ),
-                ),
+                onCreate: _createExercise,
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -566,6 +826,7 @@ class AddExercisePage extends StatelessWidget {
                     return _ExercisePickerRow(
                       name: exercise.$1,
                       muscle: exercise.$2,
+                      onTap: () => Navigator.of(context).pop(exercise.$1),
                     );
                   },
                 ),
@@ -611,60 +872,89 @@ class _AddExerciseHeader extends StatelessWidget {
 }
 
 class _ExercisePickerRow extends StatelessWidget {
-  const _ExercisePickerRow({required this.name, required this.muscle});
+  const _ExercisePickerRow({
+    required this.name,
+    required this.muscle,
+    required this.onTap,
+  });
 
   final String name;
   final String muscle;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 82,
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: _surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: _border),
+    return InkWell(
+      key: ValueKey('seleccionar-$name'),
+      onTap: onTap,
+      child: SizedBox(
+        height: 82,
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: _surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: _border),
+              ),
+              child: const Icon(Icons.fitness_center, size: 25),
             ),
-            child: const Icon(Icons.fitness_center, size: 25),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      muscle,
-                      style: const TextStyle(color: _muted, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Text(
+                        muscle,
+                        style: const TextStyle(color: _muted, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Icon(Icons.trending_up, color: Colors.white, size: 25),
-        ],
+            const Icon(Icons.trending_up, color: Colors.white, size: 25),
+          ],
+        ),
       ),
     );
   }
 }
 
-class CreateExercisePage extends StatelessWidget {
+class CreateExercisePage extends StatefulWidget {
   const CreateExercisePage({super.key});
+
+  @override
+  State<CreateExercisePage> createState() => _CreateExercisePageState();
+}
+
+class _CreateExercisePageState extends State<CreateExercisePage> {
+  final _nameController = TextEditingController();
+  String? _muscleGroup;
+
+  void _save() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty || _muscleGroup == null) return;
+    Navigator.of(context).pop((name, _muscleGroup!));
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -696,7 +986,7 @@ class CreateExercisePage extends StatelessWidget {
                     ),
                     IconButton(
                       key: const ValueKey('guardar-ejercicio'),
-                      onPressed: () {},
+                      onPressed: _save,
                       tooltip: 'Guardar',
                       icon: const Icon(
                         LucideIcons.saveCheck,
@@ -717,12 +1007,13 @@ class CreateExercisePage extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      const TextField(
-                        key: ValueKey('nombre-ejercicio'),
+                      TextField(
+                        key: const ValueKey('nombre-ejercicio'),
+                        controller: _nameController,
                         textCapitalization: TextCapitalization.words,
-                        inputFormatters: [_CapitalizedCaseFormatter()],
-                        style: TextStyle(fontSize: 17),
-                        decoration: InputDecoration(
+                        inputFormatters: const [_CapitalizedCaseFormatter()],
+                        style: const TextStyle(fontSize: 17),
+                        decoration: const InputDecoration(
                           hintText: 'Nombre del ejercicio',
                           hintStyle: TextStyle(color: _muted, fontSize: 17),
                           enabledBorder: UnderlineInputBorder(
@@ -734,7 +1025,9 @@ class CreateExercisePage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const _MuscleGroupField(),
+                      _MuscleGroupField(
+                        onChanged: (group) => _muscleGroup = group,
+                      ),
                     ],
                   ),
                 ),
@@ -773,7 +1066,9 @@ class _CapitalizedCaseFormatter extends TextInputFormatter {
 }
 
 class _MuscleGroupField extends StatefulWidget {
-  const _MuscleGroupField();
+  const _MuscleGroupField({required this.onChanged});
+
+  final ValueChanged<String> onChanged;
 
   @override
   State<_MuscleGroupField> createState() => _MuscleGroupFieldState();
@@ -794,7 +1089,10 @@ class _MuscleGroupFieldState extends State<_MuscleGroupField> {
       ),
       builder: (_) => const _MuscleGroupSheet(),
     );
-    if (group != null && mounted) setState(() => _selectedGroup = group);
+    if (group != null && mounted) {
+      setState(() => _selectedGroup = group);
+      widget.onChanged(group);
+    }
   }
 
   @override
@@ -1140,6 +1438,7 @@ class _SetData {
 
 class _ExerciseCard extends StatefulWidget {
   const _ExerciseCard({
+    super.key,
     required this.name,
     required this.sets,
     required this.onSetCompleted,
