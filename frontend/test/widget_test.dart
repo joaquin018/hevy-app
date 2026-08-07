@@ -347,7 +347,20 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const ValueKey('ejercicio-activo-Press Banca Inclinado')),
+      find.byKey(const ValueKey('ejercicio-activo-3-Press Banca Inclinado')),
+      findsOneWidget,
+    );
+
+    final addDuplicateButton = find.byKey(const ValueKey('agregar-ejercicio'));
+    await tester.ensureVisible(addDuplicateButton);
+    await tester.tap(addDuplicateButton);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('seleccionar-Press Banca Inclinado Con Barra')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('“Press Banca Inclinado Con Barra” ya está en esta rutina.'),
       findsOneWidget,
     );
 

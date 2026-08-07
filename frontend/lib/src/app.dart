@@ -1032,7 +1032,7 @@ class _RoutineCard extends StatelessWidget {
             key: ValueKey('editar-rutina-$day'),
             onTap: onEdit,
             child: Container(
-              height: 166,
+              height: 172,
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               decoration: BoxDecoration(
                 border: Border.all(color: _border),
@@ -1381,10 +1381,45 @@ class _WorkoutPageState extends State<WorkoutPage> {
       MaterialPageRoute<String>(builder: (_) => const AddExercisePage()),
     );
     if (!mounted || exercise == null) return;
+    if (_exerciseOrder.contains(exercise)) {
+      _showDuplicateExerciseMessage(exercise);
+      return;
+    }
     setState(() {
       _exerciseOrder.add(exercise);
       _exerciseSets[exercise] = const [_SetData('1', '—', '0', '0')];
     });
+  }
+
+  void _showDuplicateExerciseMessage(String exercise) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF252936),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: _border),
+          ),
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: _accent, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '“$exercise” ya está en esta rutina.',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   void _removeExercise(String exercise) {
@@ -1395,6 +1430,10 @@ class _WorkoutPageState extends State<WorkoutPage> {
   }
 
   void _replaceExercise(String current, String replacement) {
+    if (replacement != current && _exerciseOrder.contains(replacement)) {
+      _showDuplicateExerciseMessage(replacement);
+      return;
+    }
     setState(() {
       final index = _exerciseOrder.indexOf(current);
       if (index < 0) return;
@@ -1498,7 +1537,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
                         if (index > 0) const SizedBox(height: 12),
                         _ExerciseCard(
                           key: ValueKey(
-                            'ejercicio-activo-${_exerciseOrder[index]}',
+                            'ejercicio-activo-$index-${_exerciseOrder[index]}',
                           ),
                           name: _exerciseOrder[index],
                           onDelete: () =>
