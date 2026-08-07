@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -111,4 +112,13 @@ export const routineExercises = pgTable('routine_exercises', {
     .references(() => routines.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   position: integer('position').notNull(),
+});
+
+export const activeWorkoutDrafts = pgTable('active_workout_drafts', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  routineName: text('routine_name').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  originalExercises: jsonb('original_exercises').notNull(),
+  exercises: jsonb('exercises').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

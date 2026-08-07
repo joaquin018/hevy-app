@@ -9,12 +9,16 @@ class WorkoutSetPayload {
     required this.kg,
     required this.reps,
     required this.completed,
+    this.kgInput,
+    this.repsInput,
   });
 
   final String type;
   final double kg;
   final int reps;
   final bool completed;
+  final String? kgInput;
+  final String? repsInput;
 
   Map<String, Object> toJson() => {
     'type': type,
@@ -34,6 +38,20 @@ class WorkoutExercisePayload {
     'name': name,
     'sets': sets.map((set) => set.toJson()).toList(),
   };
+}
+
+class WorkoutDraftPayload {
+  const WorkoutDraftPayload({
+    required this.routineName,
+    required this.startedAt,
+    required this.originalExercises,
+    required this.exercises,
+  });
+
+  final String routineName;
+  final DateTime startedAt;
+  final List<String> originalExercises;
+  final List<WorkoutExercisePayload> exercises;
 }
 
 class PreviousSet {
@@ -95,6 +113,75 @@ class WorkoutApi {
       }),
     );
     if (response.statusCode != 201) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+  }
+
+  Future<WorkoutDraftPayload?> getWorkoutDraft() async {
+    final response = await _client.get(Uri.parse('$_baseUrl/workout-draft'));
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+    final value = jsonDecode(response.body) as Map<String, dynamic>;
+    return WorkoutDraftPayload(
+      routineName: value['routineName'] as String,
+      startedAt: DateTime.parse(value['startedAt'] as String),
+      originalExercises: List<String>.from(
+        value['originalExercises'] as List<dynamic>,
+      ),
+      exercises: [
+        for (final exerciseValue in value['exercises'] as List<dynamic>)
+          WorkoutExercisePayload(
+            name: (exerciseValue as Map<String, dynamic>)['name'] as String,
+            sets: [
+              for (final setValue in exerciseValue['sets'] as List<dynamic>)
+                WorkoutSetPayload(
+                  type: (setValue as Map<String, dynamic>)['type'] as String,
+                  kg: (setValue['kg'] as num).toDouble(),
+                  reps: setValue['reps'] as int,
+                  completed: setValue['completed'] as bool,
+                  kgInput: setValue['kgInput'] as String?,
+                  repsInput: setValue['repsInput'] as String?,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Future<void> saveWorkoutDraft(WorkoutDraftPayload draft) async {
+    final response = await _client.put(
+      Uri.parse('$_baseUrl/workout-draft'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({
+        'routineName': draft.routineName,
+        'startedAt': draft.startedAt.toUtc().toIso8601String(),
+        'originalExercises': draft.originalExercises,
+        'exercises': [
+          for (final exercise in draft.exercises)
+            {
+              'name': exercise.name,
+              'sets': [
+                for (final set in exercise.sets)
+                  {
+                    ...set.toJson(),
+                    'kgInput': set.kgInput ?? '',
+                    'repsInput': set.repsInput ?? '',
+                  },
+              ],
+            },
+        ],
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+  }
+
+  Future<void> deleteWorkoutDraft() async {
+    final response = await _client.delete(Uri.parse('$_baseUrl/workout-draft'));
+    if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}: ${response.body}');
     }
   }

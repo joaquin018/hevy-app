@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import {
+  activeWorkoutDrafts,
   exercises,
   exerciseRecords,
   routineExercises,
@@ -27,6 +28,86 @@ const app = new Elysia();
 const normalizeName = (name: string) => name.trim().toLocaleLowerCase('es');
 
 app.get('/health', () => ({ status: 'ok' }));
+
+app.get('/workout-draft', async ({ set }) => {
+  const [draft] = await db
+    .select()
+    .from(activeWorkoutDrafts)
+    .where(eq(activeWorkoutDrafts.userId, developmentUserId))
+    .limit(1);
+  if (!draft) {
+    set.status = 404;
+    return { message: 'No hay un entrenamiento en curso' };
+  }
+  return draft;
+});
+
+app.put(
+  '/workout-draft',
+  async ({ body }) => {
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(users)
+        .values({ id: developmentUserId, displayName: 'Usuario de desarrollo' })
+        .onConflictDoNothing({ target: users.id });
+      await tx
+        .insert(activeWorkoutDrafts)
+        .values({
+          userId: developmentUserId,
+          routineName: body.routineName,
+          startedAt: new Date(body.startedAt),
+          originalExercises: body.originalExercises,
+          exercises: body.exercises,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: activeWorkoutDrafts.userId,
+          set: {
+            routineName: body.routineName,
+            startedAt: new Date(body.startedAt),
+            originalExercises: body.originalExercises,
+            exercises: body.exercises,
+            updatedAt: new Date(),
+          },
+        });
+    });
+    return { saved: true };
+  },
+  {
+    body: t.Object({
+      routineName: t.String({ minLength: 1, maxLength: 120 }),
+      startedAt: t.String({ format: 'date-time' }),
+      originalExercises: t.Array(t.String({ minLength: 1, maxLength: 160 })),
+      exercises: t.Array(
+        t.Object({
+          name: t.String({ minLength: 1, maxLength: 160 }),
+          sets: t.Array(
+            t.Object({
+              type: t.Union([
+                t.Literal('warmup'),
+                t.Literal('normal'),
+                t.Literal('failure'),
+                t.Literal('drop'),
+              ]),
+              kg: t.Number({ minimum: 0 }),
+              reps: t.Integer({ minimum: 0 }),
+              completed: t.Boolean(),
+              kgInput: t.Optional(t.String({ maxLength: 30 })),
+              repsInput: t.Optional(t.String({ maxLength: 30 })),
+            }),
+          ),
+        }),
+      ),
+    }),
+  },
+);
+
+app.delete('/workout-draft', async () => {
+  await db
+    .delete(activeWorkoutDrafts)
+    .where(eq(activeWorkoutDrafts.userId, developmentUserId));
+  return { deleted: true };
+});
 
 app.get('/exercises', async () => {
   return db

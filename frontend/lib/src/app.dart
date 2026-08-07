@@ -22,6 +22,7 @@ class _ActiveWorkout {
     required this.exercises,
     required this.originalExercises,
     required this.firstExercise,
+    required this.results,
   });
 
   final String routineName;
@@ -29,6 +30,7 @@ class _ActiveWorkout {
   final List<String> exercises;
   final List<String> originalExercises;
   final String firstExercise;
+  final Map<String, List<WorkoutSetPayload>> results;
 }
 
 final _activeWorkout = ValueNotifier<_ActiveWorkout?>(null);
@@ -153,7 +155,33 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
   @override
   void initState() {
     super.initState();
-    if (widget.enableCloudPersistence) _loadRoutineFolders();
+    if (widget.enableCloudPersistence) {
+      _loadRoutineFolders();
+      _loadActiveWorkoutDraft();
+    }
+  }
+
+  Future<void> _loadActiveWorkoutDraft() async {
+    try {
+      final draft = await _workoutApi.getWorkoutDraft();
+      if (!mounted || draft == null) return;
+      final results = {
+        for (final exercise in draft.exercises)
+          exercise.name: List<WorkoutSetPayload>.of(exercise.sets),
+      };
+      _activeWorkout.value = _ActiveWorkout(
+        routineName: draft.routineName,
+        startedAt: draft.startedAt,
+        exercises: draft.exercises.map((exercise) => exercise.name).toList(),
+        originalExercises: draft.originalExercises,
+        firstExercise: draft.exercises.isEmpty
+            ? 'Sin ejercicios'
+            : draft.exercises.first.name,
+        results: results,
+      );
+    } catch (_) {
+      // La pantalla principal puede continuar aunque el borrador no cargue.
+    }
   }
 
   Future<void> _loadRoutineFolders() async {
@@ -514,6 +542,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     required String routineName,
     DateTime? resumeStartedAt,
     List<String>? originalExercises,
+    Map<String, List<WorkoutSetPayload>> initialResults = const {},
   }) {
     return Navigator.of(context)
         .push<List<String>>(
@@ -523,6 +552,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
               routineName: routineName,
               resumeStartedAt: resumeStartedAt,
               originalExercises: originalExercises,
+              initialResults: initialResults,
             ),
           ),
         )
@@ -623,6 +653,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         originalExercises: active.originalExercises,
         routineName: active.routineName,
         resumeStartedAt: active.startedAt,
+        initialResults: active.results,
       );
       return;
     }
@@ -728,6 +759,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         originalExercises: active.originalExercises,
         routineName: active.routineName,
         resumeStartedAt: active.startedAt,
+        initialResults: active.results,
       );
       return;
     }
@@ -873,6 +905,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
                   originalExercises: activeWorkout.originalExercises,
                   routineName: activeWorkout.routineName,
                   resumeStartedAt: activeWorkout.startedAt,
+                  initialResults: activeWorkout.results,
                 ),
               ),
             ),
@@ -1273,7 +1306,14 @@ class _ActiveWorkoutBannerState extends State<_ActiveWorkoutBanner> {
         ],
       ),
     );
-    if (confirmed == true) _activeWorkout.value = null;
+    if (confirmed == true) {
+      try {
+        await WorkoutApi().deleteWorkoutDraft();
+      } catch (_) {
+        // El estado local se descarta aunque la API no esté disponible.
+      }
+      _activeWorkout.value = null;
+    }
   }
 
   @override
@@ -1369,6 +1409,7 @@ class WorkoutPage extends StatefulWidget {
     this.routineName,
     this.resumeStartedAt,
     this.originalExercises,
+    this.initialResults = const {},
   });
 
   final List<String> initialExercises;
@@ -1376,6 +1417,7 @@ class WorkoutPage extends StatefulWidget {
   final String? routineName;
   final DateTime? resumeStartedAt;
   final List<String>? originalExercises;
+  final Map<String, List<WorkoutSetPayload>> initialResults;
 
   @override
   State<WorkoutPage> createState() => _WorkoutPageState();
@@ -1384,10 +1426,12 @@ class WorkoutPage extends StatefulWidget {
 class _WorkoutPageState extends State<WorkoutPage> {
   Timer? _restTicker;
   Timer? _workoutTicker;
+  Timer? _draftSaveDebounce;
   int? _remainingSeconds;
   int _totalSeconds = 1;
   int _elapsedSeconds = 0;
   double _totalVolume = 0;
+  bool _workoutClosed = false;
   late List<String> _exerciseOrder;
   late final List<String> _initialExerciseOrder;
   late final DateTime _startedAt;
@@ -1402,12 +1446,38 @@ class _WorkoutPageState extends State<WorkoutPage> {
     _initialExerciseOrder = List.of(
       widget.originalExercises ?? widget.initialExercises,
     );
+    _workoutResults.addAll({
+      for (final entry in widget.initialResults.entries)
+        entry.key: List<WorkoutSetPayload>.of(entry.value),
+    });
     for (final exercise in _exerciseOrder) {
+      final savedSets = _workoutResults[exercise];
       _exerciseSets.putIfAbsent(
         exercise,
-        () => const [_SetData('1', '—', '0', '0')],
+        () => savedSets == null || savedSets.isEmpty
+            ? const [_SetData('1', '—', '', '')]
+            : [
+                for (var index = 0; index < savedSets.length; index++)
+                  _SetData(
+                    _setLabelFor(savedSets[index].type, index),
+                    '—',
+                    savedSets[index].kgInput ??
+                        (savedSets[index].completed
+                            ? _formatDraftKg(savedSets[index].kg)
+                            : ''),
+                    savedSets[index].repsInput ??
+                        (savedSets[index].completed
+                            ? savedSets[index].reps.toString()
+                            : ''),
+                    completed: savedSets[index].completed,
+                  ),
+              ],
       );
     }
+    _totalVolume = _workoutResults.values
+        .expand((sets) => sets)
+        .where((set) => set.completed)
+        .fold(0, (total, set) => total + (set.kg * set.reps));
     if (widget.isEditing) return;
     final startedAt = widget.resumeStartedAt ?? DateTime.now();
     _startedAt = startedAt;
@@ -1420,14 +1490,66 @@ class _WorkoutPageState extends State<WorkoutPage> {
       firstExercise: _exerciseOrder.isEmpty
           ? 'Sin ejercicios'
           : _exerciseOrder.first,
+      results: _copyWorkoutResults(),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _activeWorkout.value = activeWorkout;
+      _persistActiveWorkout();
     });
     _loadPreviousHistory();
     _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsedSeconds++);
     });
+  }
+
+  static String _setLabelFor(String type, int index) => switch (type) {
+    'warmup' => 'W',
+    'failure' => 'F',
+    'drop' => 'D',
+    _ => '${index + 1}',
+  };
+
+  static String _formatDraftKg(double kg) => kg == kg.roundToDouble()
+      ? kg.round().toString()
+      : kg.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
+  Map<String, List<WorkoutSetPayload>> _copyWorkoutResults() => {
+    for (final exercise in _exerciseOrder)
+      exercise: List<WorkoutSetPayload>.of(
+        _workoutResults[exercise] ?? const [],
+      ),
+  };
+
+  Future<void> _persistActiveWorkout() async {
+    if (widget.isEditing) return;
+    try {
+      await _workoutApi.saveWorkoutDraft(
+        WorkoutDraftPayload(
+          routineName: widget.routineName ?? 'Rutina',
+          startedAt: _startedAt,
+          originalExercises: List.of(_initialExerciseOrder),
+          exercises: [
+            for (final exercise in _exerciseOrder)
+              WorkoutExercisePayload(
+                name: exercise,
+                sets: List<WorkoutSetPayload>.of(
+                  _workoutResults[exercise] ?? const [],
+                ),
+              ),
+          ],
+        ),
+      );
+    } catch (_) {
+      // Se reintentará con el próximo cambio del entrenamiento.
+    }
+  }
+
+  void _scheduleDraftSave() {
+    _draftSaveDebounce?.cancel();
+    _draftSaveDebounce = Timer(
+      const Duration(milliseconds: 200),
+      _persistActiveWorkout,
+    );
   }
 
   String get _formattedElapsedTime {
@@ -1452,12 +1574,14 @@ class _WorkoutPageState extends State<WorkoutPage> {
           final currentSets = List<_SetData>.of(
             _exerciseSets[exercise] ?? const [],
           );
-          while (currentSets.length < previousSets.length) {
-            currentSets.add(
-              _SetData('${currentSets.length + 1}', '—', '0', '0'),
-            );
+          while (widget.resumeStartedAt == null &&
+              currentSets.length < previousSets.length) {
+            currentSets.add(_SetData('${currentSets.length + 1}', '—', '', ''));
           }
-          for (var index = 0; index < previousSets.length; index++) {
+          final comparableSetCount = currentSets.length < previousSets.length
+              ? currentSets.length
+              : previousSets.length;
+          for (var index = 0; index < comparableSetCount; index++) {
             final previous = previousSets[index];
             final current = currentSets[index];
             final kg = previous.kg == previous.kg.roundToDouble()
@@ -1472,6 +1596,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
               current.reps,
               placeholderKg: kg,
               placeholderReps: previous.reps.toString(),
+              completed: current.completed,
             );
           }
           _exerciseSets[exercise] = currentSets;
@@ -1509,7 +1634,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
     }
     setState(() {
       _exerciseOrder.add(exercise);
-      _exerciseSets[exercise] = const [_SetData('1', '—', '0', '0')];
+      _exerciseSets[exercise] = const [_SetData('1', '—', '', '')];
     });
     _syncActiveWorkout();
     _loadPreviousHistory();
@@ -1558,7 +1683,9 @@ class _WorkoutPageState extends State<WorkoutPage> {
       firstExercise: _exerciseOrder.isEmpty
           ? 'Sin ejercicios'
           : _exerciseOrder.first,
+      results: _copyWorkoutResults(),
     );
+    _scheduleDraftSave();
   }
 
   void _removeExercise(String exercise) {
@@ -1580,7 +1707,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
       if (index < 0) return;
       _exerciseOrder[index] = replacement;
       _exerciseSets[replacement] =
-          _exerciseSets.remove(current) ?? const [_SetData('1', '—', '0', '0')];
+          _exerciseSets.remove(current) ?? const [_SetData('1', '—', '', '')];
       final results = _workoutResults.remove(current);
       if (results != null) _workoutResults[replacement] = results;
     });
@@ -1671,6 +1798,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
     if (!mounted || confirmed != true) return;
 
     try {
+      _draftSaveDebounce?.cancel();
       await _workoutApi.saveSession(
         routineName: widget.routineName ?? 'Rutina',
         startedAt: _startedAt,
@@ -1684,6 +1812,12 @@ class _WorkoutPageState extends State<WorkoutPage> {
             ),
         ],
       );
+      _workoutClosed = true;
+      try {
+        await _workoutApi.deleteWorkoutDraft();
+      } catch (_) {
+        // La sesión ya se guardó; no se vuelve a crear el borrador al salir.
+      }
       _activeWorkout.value = null;
       if (mounted) {
         Navigator.of(
@@ -1727,6 +1861,10 @@ class _WorkoutPageState extends State<WorkoutPage> {
   void dispose() {
     _restTicker?.cancel();
     _workoutTicker?.cancel();
+    _draftSaveDebounce?.cancel();
+    if (!widget.isEditing && !_workoutClosed) {
+      unawaited(_persistActiveWorkout());
+    }
     super.dispose();
   }
 
@@ -1770,8 +1908,10 @@ class _WorkoutPageState extends State<WorkoutPage> {
                             replacement,
                           ),
                           onReorder: _reorderExercises,
-                          onSetsChanged: (sets) =>
-                              _workoutResults[_exerciseOrder[index]] = sets,
+                          onSetsChanged: (sets) {
+                            _workoutResults[_exerciseOrder[index]] = sets;
+                            _syncActiveWorkout();
+                          },
                           onSetCompleted: _startRestTimer,
                           onVolumeChanged: _updateVolume,
                           sets: _exerciseSets[_exerciseOrder[index]]!,
@@ -2669,6 +2809,7 @@ class _SetData {
     this.reps, {
     this.placeholderKg,
     this.placeholderReps,
+    this.completed = false,
   });
 
   final String set;
@@ -2677,6 +2818,7 @@ class _SetData {
   final String reps;
   final String? placeholderKg;
   final String? placeholderReps;
+  final bool completed;
 }
 
 class _ExerciseCard extends StatefulWidget {
@@ -2708,16 +2850,41 @@ class _ExerciseCard extends StatefulWidget {
 class _ExerciseCardState extends State<_ExerciseCard> {
   final WorkoutApi _workoutApi = WorkoutApi();
   int _restMinutes = 3;
+  int? _personalRecordSetIndex;
+  final Map<int, bool> _personalRecordCandidates = {};
   late final List<_SetData> _sets = List.of(widget.sets);
   late final List<WorkoutSetPayload> _results = [
     for (final set in widget.sets)
       WorkoutSetPayload(
-        type: set.set == 'W' ? 'warmup' : 'normal',
+        type: switch (set.set) {
+          'W' => 'warmup',
+          'F' => 'failure',
+          'D' => 'drop',
+          _ => 'normal',
+        },
         kg: double.tryParse(set.kg) ?? 0,
         reps: int.tryParse(set.reps) ?? 0,
-        completed: false,
+        completed: set.completed,
+        kgInput: set.kg,
+        repsInput: set.reps,
       ),
   ];
+
+  double? get _previousBestKg {
+    final values = _sets
+        .map((set) => double.tryParse(set.placeholderKg ?? ''))
+        .whereType<double>();
+    if (values.isEmpty) return null;
+    return values.reduce((best, value) => value > best ? value : best);
+  }
+
+  int? get _previousBestReps {
+    final values = _sets
+        .map((set) => int.tryParse(set.placeholderReps ?? ''))
+        .whereType<int>();
+    if (values.isEmpty) return null;
+    return values.reduce((best, value) => value > best ? value : best);
+  }
 
   @override
   void initState() {
@@ -2759,6 +2926,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           current.reps,
           placeholderKg: widget.sets[index].placeholderKg,
           placeholderReps: widget.sets[index].placeholderReps,
+          completed: current.completed,
         );
       }
     }
@@ -2773,7 +2941,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ) +
               1;
     setState(() {
-      _sets.add(_SetData('$nextNumber', '—', '0', '0'));
+      _sets.add(_SetData('$nextNumber', '—', '', ''));
       _results.add(
         const WorkoutSetPayload(
           type: 'normal',
@@ -2784,6 +2952,61 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       );
     });
     widget.onSetsChanged(List.of(_results));
+  }
+
+  void _removeSet(int index) {
+    if (index < 0 || index >= _sets.length) return;
+    setState(() {
+      _sets.removeAt(index);
+      _results.removeAt(index);
+      _personalRecordCandidates
+        ..clear()
+        ..addEntries([
+          for (
+            var resultIndex = 0;
+            resultIndex < _results.length;
+            resultIndex++
+          )
+            MapEntry(
+              resultIndex,
+              _results[resultIndex].completed &&
+                  _previousBestKg != null &&
+                  _previousBestReps != null &&
+                  (_results[resultIndex].kg > _previousBestKg! ||
+                      _results[resultIndex].reps > _previousBestReps!),
+            ),
+        ]);
+      _personalRecordSetIndex = _findBestPersonalRecordIndex();
+    });
+    widget.onSetsChanged(List.of(_results));
+  }
+
+  int? _findBestPersonalRecordIndex() {
+    final candidates = _personalRecordCandidates.entries
+        .where(
+          (entry) =>
+              entry.value &&
+              entry.key < _results.length &&
+              _results[entry.key].completed,
+        )
+        .map((entry) => entry.key);
+    if (candidates.isEmpty) return null;
+    return candidates.reduce((bestIndex, candidateIndex) {
+      final best = _results[bestIndex];
+      final candidate = _results[candidateIndex];
+      if (candidate.kg != best.kg) {
+        return candidate.kg > best.kg ? candidateIndex : bestIndex;
+      }
+      return candidate.reps > best.reps ? candidateIndex : bestIndex;
+    });
+  }
+
+  void _updatePersonalRecordCandidate(int index, bool isRecord) {
+    _personalRecordCandidates[index] = isRecord;
+    final nextIndex = _findBestPersonalRecordIndex();
+    if (nextIndex != _personalRecordSetIndex && mounted) {
+      setState(() => _personalRecordSetIndex = nextIndex);
+    }
   }
 
   Future<void> _openExerciseOptions() async {
@@ -2902,7 +3125,11 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 Expanded(
                   child: Text(
                     widget.name,
-                    style: const TextStyle(color: _accent, fontSize: 18),
+                    style: const TextStyle(
+                      color: _accent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -2943,10 +3170,16 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           for (var index = 0; index < _sets.length; index++)
             _SetRow(
               data: _sets[index],
+              previousBestKg: _previousBestKg,
+              previousBestReps: _previousBestReps,
+              showPersonalRecord: _personalRecordSetIndex == index,
               onChanged: (result) {
                 _results[index] = result;
                 widget.onSetsChanged(List.of(_results));
               },
+              onPersonalRecordChanged: (isRecord) =>
+                  _updatePersonalRecordCandidate(index, isRecord),
+              onRemoved: () => _removeSet(index),
               onCompleted: () => widget.onSetCompleted(_restMinutes * 60),
               onVolumeChanged: widget.onVolumeChanged,
             ),
@@ -3531,13 +3764,23 @@ enum _SetType { warmup, normal, failure, drop, remove }
 class _SetRow extends StatefulWidget {
   const _SetRow({
     required this.data,
+    required this.previousBestKg,
+    required this.previousBestReps,
+    required this.showPersonalRecord,
     required this.onChanged,
+    required this.onPersonalRecordChanged,
+    required this.onRemoved,
     required this.onCompleted,
     required this.onVolumeChanged,
   });
 
   final _SetData data;
+  final double? previousBestKg;
+  final int? previousBestReps;
+  final bool showPersonalRecord;
   final ValueChanged<WorkoutSetPayload> onChanged;
+  final ValueChanged<bool> onPersonalRecordChanged;
+  final VoidCallback onRemoved;
   final VoidCallback onCompleted;
   final ValueChanged<double> onVolumeChanged;
 
@@ -3555,7 +3798,7 @@ class _SetRowState extends State<_SetRow> {
     text: widget.data.reps,
   );
   bool _removed = false;
-  bool _completed = false;
+  late bool _completed = widget.data.completed;
   double _reportedVolume = 0;
 
   double get _effectiveKg =>
@@ -3569,6 +3812,17 @@ class _SetRowState extends State<_SetRow> {
       0;
 
   double get _currentVolume => _effectiveKg * _effectiveReps;
+
+  bool get _isPersonalRecord {
+    if (_removed ||
+        !_completed ||
+        widget.previousBestKg == null ||
+        widget.previousBestReps == null) {
+      return false;
+    }
+    return _effectiveKg > widget.previousBestKg! ||
+        _effectiveReps > widget.previousBestReps!;
+  }
 
   String get _type => switch (_setLabel) {
     'W' => 'warmup',
@@ -3584,6 +3838,8 @@ class _SetRowState extends State<_SetRow> {
         kg: _effectiveKg,
         reps: _effectiveReps,
         completed: _completed && !_removed,
+        kgInput: _kgController.text,
+        repsInput: _repsController.text,
       ),
     );
   }
@@ -3591,9 +3847,12 @@ class _SetRowState extends State<_SetRow> {
   @override
   void initState() {
     super.initState();
-    _clearDefaultsWhenPreviousExists();
+    if (_completed) _reportedVolume = _currentVolume;
     _kgController.addListener(_refreshReportedVolume);
     _repsController.addListener(_refreshReportedVolume);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onPersonalRecordChanged(_isPersonalRecord);
+    });
   }
 
   @override
@@ -3601,19 +3860,11 @@ class _SetRowState extends State<_SetRow> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.data.placeholderKg == null &&
         widget.data.placeholderKg != null) {
-      _clearDefaultsWhenPreviousExists();
-      _notifyChanged();
-    }
-  }
-
-  void _clearDefaultsWhenPreviousExists() {
-    if (widget.data.placeholderKg != null &&
-        _kgController.text == widget.data.kg) {
-      _kgController.clear();
-    }
-    if (widget.data.placeholderReps != null &&
-        _repsController.text == widget.data.reps) {
-      _repsController.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _notifyChanged();
+        widget.onPersonalRecordChanged(_isPersonalRecord);
+      });
     }
   }
 
@@ -3637,6 +3888,7 @@ class _SetRowState extends State<_SetRow> {
       _reportedVolume = 0;
     }
     _notifyChanged();
+    widget.onPersonalRecordChanged(_isPersonalRecord);
   }
 
   void _refreshReportedVolume() {
@@ -3644,6 +3896,8 @@ class _SetRowState extends State<_SetRow> {
       final updatedVolume = _currentVolume;
       widget.onVolumeChanged(updatedVolume - _reportedVolume);
       _reportedVolume = updatedVolume;
+      if (mounted) setState(() {});
+      widget.onPersonalRecordChanged(_isPersonalRecord);
     }
     _notifyChanged();
   }
@@ -3682,7 +3936,12 @@ class _SetRowState extends State<_SetRow> {
           _removed = true;
       }
     });
+    if (type == _SetType.remove) {
+      widget.onRemoved();
+      return;
+    }
     _notifyChanged();
+    widget.onPersonalRecordChanged(_isPersonalRecord);
   }
 
   @override
@@ -3700,14 +3959,24 @@ class _SetRowState extends State<_SetRow> {
               onTap: _selectSetType,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  _setLabel,
-                  style: TextStyle(
-                    color: _setColor,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 17,
-                  ),
-                ),
+                child: widget.showPersonalRecord
+                    ? const Tooltip(
+                        message: 'Nuevo récord personal',
+                        child: Icon(
+                          Icons.workspace_premium,
+                          key: ValueKey('medalla-record-personal'),
+                          color: Color(0xFFFFD600),
+                          size: 25,
+                        ),
+                      )
+                    : Text(
+                        _setLabel,
+                        style: TextStyle(
+                          color: _setColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 17,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -3723,7 +3992,7 @@ class _SetRowState extends State<_SetRow> {
             child: _InlineNumberField(
               key: ValueKey('kg-${widget.data.set}'),
               controller: _kgController,
-              placeholder: widget.data.placeholderKg,
+              placeholder: widget.data.placeholderKg ?? '0',
               decimal: true,
             ),
           ),
@@ -3731,7 +4000,7 @@ class _SetRowState extends State<_SetRow> {
             child: _InlineNumberField(
               key: ValueKey('repeticiones-${widget.data.set}'),
               controller: _repsController,
-              placeholder: widget.data.placeholderReps,
+              placeholder: widget.data.placeholderReps ?? '0',
             ),
           ),
           SizedBox(

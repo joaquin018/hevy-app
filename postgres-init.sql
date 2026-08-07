@@ -81,6 +81,15 @@ CREATE TABLE IF NOT EXISTS routine_exercises (
   position INTEGER NOT NULL CHECK (position >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS active_workout_drafts (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  routine_name TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  original_exercises JSONB NOT NULL,
+  exercises JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 INSERT INTO users (id, display_name)
 VALUES ('00000000-0000-4000-8000-000000000001', 'Usuario de desarrollo')
 ON CONFLICT (id) DO NOTHING;
