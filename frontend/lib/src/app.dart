@@ -188,6 +188,50 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     });
   }
 
+  Future<void> _renameFolder(int index) async {
+    final currentName = _folders[index];
+    var updatedName = currentName;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Cambiar nombre de carpeta'),
+        content: TextFormField(
+          key: const ValueKey('editar-nombre-carpeta'),
+          initialValue: currentName,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          inputFormatters: const [_CapitalizedCaseFormatter()],
+          onChanged: (value) => updatedName = value,
+          onFieldSubmitted: (value) {
+            if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            key: const ValueKey('guardar-nombre-carpeta'),
+            onPressed: () {
+              final value = updatedName.trim();
+              if (value.isNotEmpty) Navigator.pop(context, value);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null || name == currentName) return;
+    setState(() {
+      final routines = _folderRoutines.remove(currentName)!;
+      _folders[index] = name;
+      _folderRoutines[name] = routines;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -251,9 +295,21 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
                               : '${_folderRoutines[folder]!.length} rutinas',
                           style: const TextStyle(color: _muted),
                         ),
-                        trailing: const Icon(
-                          Icons.chevron_right,
-                          color: _muted,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: ValueKey('renombrar-carpeta-$folder'),
+                              onPressed: () => _renameFolder(index),
+                              tooltip: 'Cambiar nombre',
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: _muted,
+                                size: 21,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: _muted),
+                          ],
                         ),
                       ),
                     );
@@ -317,6 +373,48 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     );
   }
 
+  Future<void> _renameRoutine(int index) async {
+    final routine = widget.routines[index];
+    var updatedName = routine.name;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Cambiar nombre de rutina'),
+        content: TextFormField(
+          key: const ValueKey('editar-nombre-rutina'),
+          initialValue: routine.name,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          inputFormatters: const [_CapitalizedCaseFormatter()],
+          onChanged: (value) => updatedName = value,
+          onFieldSubmitted: (value) {
+            if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            key: const ValueKey('guardar-nombre-rutina'),
+            onPressed: () {
+              final value = updatedName.trim();
+              if (value.isNotEmpty) Navigator.pop(context, value);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null || name == routine.name) return;
+    setState(() {
+      widget.routines[index] = _RoutineData(name, routine.exercises);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -341,6 +439,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
                     return _RoutineCard(
                       day: routine.name,
                       exercises: routine.exercises,
+                      onRename: () => _renameRoutine(index),
                       onEdit: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => WorkoutPage(
@@ -449,12 +548,14 @@ class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
     required this.day,
     required this.exercises,
+    required this.onRename,
     required this.onEdit,
     required this.onStart,
   });
 
   final String day;
   final String exercises;
+  final VoidCallback onRename;
   final VoidCallback onEdit;
   final VoidCallback onStart;
 
@@ -471,7 +572,7 @@ class _RoutineCard extends StatelessWidget {
             onTap: onEdit,
             child: Container(
               height: 166,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               decoration: BoxDecoration(
                 border: Border.all(color: _border),
                 borderRadius: BorderRadius.circular(22),
@@ -488,6 +589,22 @@ class _RoutineCard extends StatelessWidget {
                             fontSize: 19,
                             fontWeight: FontWeight.w600,
                           ),
+                        ),
+                      ),
+                      IconButton(
+                        key: ValueKey('renombrar-rutina-$day'),
+                        onPressed: onRename,
+                        tooltip: 'Cambiar nombre',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 30,
+                          height: 30,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                          color: _muted,
+                          size: 20,
                         ),
                       ),
                     ],

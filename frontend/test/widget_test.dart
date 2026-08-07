@@ -22,6 +22,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fuerza Semanal'), findsOneWidget);
     expect(find.text('Sin rutinas'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('renombrar-carpeta-Fuerza Semanal')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('editar-nombre-carpeta')),
+      'potencia',
+    );
+    await tester.tap(find.byKey(const ValueKey('guardar-nombre-carpeta')));
+    await tester.pumpAndSettle();
+    expect(find.text('Potencia'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('carpeta-Entrenamiento')));
     await tester.pumpAndSettle();
@@ -36,6 +47,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Tren Superior'), findsOneWidget);
     expect(find.text('Sin ejercicios'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('renombrar-rutina-Tren Superior')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('editar-nombre-rutina')),
+      'torso completo',
+    );
+    await tester.tap(find.byKey(const ValueKey('guardar-nombre-rutina')));
+    await tester.pumpAndSettle();
+    expect(find.text('Torso Completo'), findsOneWidget);
     expect(find.text('Lunes'), findsOneWidget);
     expect(find.text('Iniciar rutina'), findsWidgets);
     expect(find.byIcon(Icons.more_horiz), findsNothing);
@@ -50,7 +72,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey('iniciar-rutina-Tren Superior')),
+      find.byKey(const ValueKey('iniciar-rutina-Torso Completo')),
     );
     await tester.pumpAndSettle();
     expect(find.text('Press Banca Inclinado Con Barra'), findsNothing);
