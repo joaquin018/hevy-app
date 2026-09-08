@@ -1,5 +1,6 @@
 .env
 backend/node_modules/
+backups/
 mobile/.dart_tool/
 mobile/build/
 *.iml

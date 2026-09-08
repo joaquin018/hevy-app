@@ -1,10 +1,9 @@
-FROM node:24-alpine AS dependencies
+FROM oven/bun:1.4.2-alpine AS dependencies
 WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
-FROM oven/bun:1-alpine
+FROM oven/bun:1.4.2-alpine
 WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY package.json ./
