@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'workout_history_models.dart';
 
 class WorkoutSetPayload {
   const WorkoutSetPayload({
@@ -86,6 +87,28 @@ class WorkoutApi {
 
   static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
   final http.Client _client;
+
+  Future<WorkoutHistoryPage> getHistory({int offset = 0}) async {
+    final response = await _client.get(
+      Uri.parse(
+        '$_baseUrl/workout-sessions',
+      ).replace(queryParameters: {'offset': '$offset', 'limit': '20'}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'No se pudo cargar el historial (${response.statusCode})',
+      );
+    }
+    final value =
+        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return WorkoutHistoryPage(
+      sessions: (value['sessions'] as List)
+          .map((v) => WorkoutHistorySession.fromJson(v as Map<String, dynamic>))
+          .toList(),
+      total: value['total'] as int,
+      hasMore: value['hasMore'] as bool,
+    );
+  }
 
   String get _baseUrl {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;

@@ -2,12 +2,30 @@
 
 Stack mínimo:
 
-- Flutter + Riverpod + HTTP, sin base de datos local.
+- Flutter 3.47.2 + Dart 3.13.2 + Riverpod + HTTP, sin base de datos local.
 - Elysia + TypeScript + Drizzle sobre Bun 1.4.2, como runtime y gestor de dependencias.
 - PostgreSQL 18.6 como única fuente de datos.
 - Cloudflare Tunnel opcional.
 
 ## Historial de entrenamientos
+
+El botón Historial de la cabecera de Rutinas abre las sesiones, de la más
+reciente a la más antigua, con fecha y hora local, duración, volumen y récords.
+Cada tarjeta permite mostrar todos los ejercicios y desplegar pesos,
+repeticiones y tipo de serie. Se puede actualizar deslizando hacia abajo.
+
+`GET /workout-sessions?offset=0&limit=20` devuelve `sessions`, `total` y
+`hasMore`. El volumen suma peso × repeticiones de las series completadas,
+incluidas las de calentamiento. Los récords cuentan series que mejoraron
+peso o repeticiones frente a su referencia anterior; la primera aparición
+establece la referencia y no cuenta como récord.
+
+Para recuperar también los logros de sesiones existentes, el servidor
+reconstruye las referencias en orden de guardado antes de paginar. Así un
+récord posterior no borra el logro de una sesión anterior. Esta primera
+implementación lee el historial del usuario completo para calcularlos; si
+crece mucho, conviene persistir los logros por serie y paginar en SQL.
+No requiere migración de la base de datos.
 
 PostgreSQL guarda sesiones, ejercicios y cada serie realizada. La primera
 sesión crea el punto de partida. Después, cada posición de serie mantiene su

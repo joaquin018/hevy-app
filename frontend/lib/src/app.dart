@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'workout_api.dart';
+import 'workout_history_page.dart';
 
 const _accent = Color(0xFF7C8CFF);
 const _page = Color(0xFF090B0F);
@@ -435,7 +436,20 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
           bottom: false,
           child: Column(
             children: [
-              _RoutinesHeader(onCreateFolder: _createFolder),
+              _RoutinesHeader(
+                onCreateFolder: _createFolder,
+                onHistory: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => WorkoutHistoryScreen(
+                        loadHistory: widget.enableCloudPersistence
+                            ? (offset) => _workoutApi.getHistory(offset: offset)
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+              ),
               Expanded(
                 child: _folders.isEmpty
                     ? _EmptyFolders(onCreateFolder: _createFolder)
@@ -919,9 +933,13 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
 enum _WorkoutConflictAction { resume, startNew }
 
 class _RoutinesHeader extends StatelessWidget {
-  const _RoutinesHeader({required this.onCreateFolder});
+  const _RoutinesHeader({
+    required this.onCreateFolder,
+    required this.onHistory,
+  });
 
   final VoidCallback onCreateFolder;
+  final VoidCallback onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -940,6 +958,12 @@ class _RoutinesHeader extends StatelessWidget {
                 letterSpacing: -0.5,
               ),
             ),
+          ),
+          IconButton(
+            key: const ValueKey('abrir-historial'),
+            tooltip: 'Historial',
+            onPressed: onHistory,
+            icon: const Icon(Icons.history_rounded, color: _accent),
           ),
           IconButton(
             key: const ValueKey('crear-carpeta'),

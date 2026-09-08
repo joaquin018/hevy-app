@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { buildWorkoutHistory } from './workout-history.ts';
 
 import {
   activeWorkoutDrafts,
@@ -28,6 +29,38 @@ const app = new Elysia();
 const normalizeName = (name: string) => name.trim().toLocaleLowerCase('es');
 
 app.get('/health', () => ({ status: 'ok' }));
+
+app.get('/workout-sessions', async ({ query }) => {
+  const offset = query.offset ?? 0;
+  const limit = query.limit ?? 20;
+  return db.transaction(async (tx) => {
+    const sessions = await tx.select().from(workoutSessions)
+      .where(eq(workoutSessions.userId, developmentUserId))
+      .orderBy(asc(workoutSessions.createdAt), asc(workoutSessions.id));
+    const rows = await tx.select({
+      sessionId: workoutSessionExercises.sessionId,
+      sessionExerciseId: workoutSessionExercises.id,
+      exerciseId: exercises.id,
+      name: exercises.name,
+      position: workoutSets.position,
+      type: workoutSets.setType,
+      kg: workoutSets.weightKg,
+      reps: workoutSets.repetitions,
+    }).from(workoutSessions)
+      .innerJoin(workoutSessionExercises, eq(workoutSessionExercises.sessionId, workoutSessions.id))
+      .innerJoin(exercises, eq(exercises.id, workoutSessionExercises.exerciseId))
+      .innerJoin(workoutSets, eq(workoutSets.sessionExerciseId, workoutSessionExercises.id))
+      .where(and(eq(workoutSessions.userId, developmentUserId), eq(workoutSets.completed, true)))
+      .orderBy(asc(workoutSessions.createdAt), asc(workoutSessions.id), asc(workoutSessionExercises.position), asc(workoutSets.position));
+    const history = buildWorkoutHistory(sessions, rows);
+    return { sessions: history.slice(offset, offset + limit), total: history.length, hasMore: offset + limit < history.length };
+  }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+}, {
+  query: t.Object({
+    offset: t.Optional(t.Numeric({ minimum: 0, maximum: 1000000, multipleOf: 1 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+  }),
+});
 
 app.get('/workout-draft', async ({ set }) => {
   const [draft] = await db
