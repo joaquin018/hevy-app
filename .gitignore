@@ -1,6 +1,5 @@
 .env
+backend/.env
+client_secret*.json
 backend/node_modules/
-backups/
-mobile/.dart_tool/
-mobile/build/
 *.iml

@@ -23,6 +23,12 @@ services:
     environment:
       PORT: 3000
       DATABASE_URL: postgres://hevy:hevy_dev_password@postgres:5432/hevy
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:5173/api/auth/google/callback}
+      LEGACY_OWNER_EMAIL: ${LEGACY_OWNER_EMAIL:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      SKIP_LOGIN: ${SKIP_LOGIN:-false}
     ports:
       - "3000:3000"
     depends_on:
@@ -34,14 +40,15 @@ services:
       timeout: 3s
       retries: 5
 
-  cloudflared:
-    image: cloudflare/cloudflared:2026.8.3
-    profiles: ["tunnel"]
+  web:
+    build: ./frontend
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-replace-me}
+    ports:
+      - "5173:80"
     depends_on:
       api:
         condition: service_healthy
+
 
 volumes:
   postgres18_data:

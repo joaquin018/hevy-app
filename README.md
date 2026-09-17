@@ -1,11 +1,56 @@
 # Hevy Cloud Stack
 
-Stack mínimo:
+## Aplicación Flutter
 
-- Flutter 3.47.2 + Dart 3.13.2 + Riverpod + HTTP, sin base de datos local.
-- Elysia + TypeScript + Drizzle sobre Bun 1.4.2, como runtime y gestor de dependencias.
-- PostgreSQL 18.6 como única fuente de datos.
-- Cloudflare Tunnel opcional.
+Flutter es la única interfaz, distribuida como web/PWA.
+Las pantallas están en `frontend/lib`; `frontend/web` contiene solo la entrada
+web, el manifiesto y los iconos. La API Elysia y PostgreSQL conservan los datos.
+
+Estructura:
+
+- `frontend/lib/*.dart`: pantallas, autenticación, modelos y cliente API.
+- `frontend/web`: arranque, manifiesto e iconos de la PWA.
+- `frontend/assets`: recursos de la aplicación.
+- `backend/*.ts`: API, esquema y migración.
+- `docker-compose.yml` y `postgres-init.sql`: servicios e inicialización de datos.
+
+Flutter genera `.dart_tool` y `build`; no se versionan. Los respaldos locales
+están fuera del repositorio en `C:\0Antigravity\hevy-app-db-backups`.
+
+### Ejecutar la versión web
+
+```powershell
+cd frontend
+flutter pub get
+flutter build web --release
+cd ..
+docker compose up -d --build api web
+```
+
+Abre http://localhost:5173. Después de modificar Dart, repite la compilación y
+`docker compose up -d --build web`. El contenedor sirve `frontend/build/web`:
+el SDK Flutter se utiliza localmente y no hace falta dentro de Nginx.
+
+La web usa `/api` en el mismo origen y Google usa cookies HttpOnly.
+Configura `WEB_ORIGIN=http://localhost:5173`
+y `GOOGLE_REDIRECT_URI=http://localhost:5173/api/auth/google/callback` en `.env`.
+Consulta [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md).
+
+`SKIP_LOGIN=true` en la API conserva el acceso temporal con el usuario local.
+Para exigir Google, cambia a `false` y recrea el servicio `api`.
+
+La PWA incluye manifiesto e iconos para instalarla desde el navegador con HTTPS
+(o localhost). Necesita conexión para cargar y guardar datos. El worker no
+almacena respuestas privadas ni ofrece uso sin conexión. Las actualizaciones
+se cargan al reabrir o recargar; no se fuerza una recarga durante un entrenamiento.
+
+### Validación
+
+```powershell
+cd frontend
+flutter analyze
+flutter build web --release
+```
 
 ## Historial de entrenamientos
 
@@ -33,9 +78,10 @@ mejor marca: solo cambia cuando aumenta el peso o aumentan las repeticiones.
 Los resultados inferiores permanecen en el historial, pero no reemplazan la
 referencia que aparece en la columna `Anterior`.
 
-Durante el desarrollo se usa el usuario fijo
-`00000000-0000-4000-8000-000000000001`. El esquema ya separa los datos por
-usuario para conectar autenticación posteriormente.
+Cada cuenta accede con Google y utiliza su correo verificado como nombre.
+Rutinas, ejercicios, borradores, historial y récords se filtran por el usuario
+de la sesión autenticada. Consulta [la configuración de Google](GOOGLE_AUTH_SETUP.md)
+para crear las credenciales y asignar explícitamente los datos de desarrollo.
 
 ## API y PostgreSQL
 
@@ -53,33 +99,24 @@ bun run dev
 ejecuta la API sin recarga automática. La API usa el puerto 3000; detén la
 API de Docker con `docker compose stop api` antes de ejecutarla localmente.
 
+`bun run dev` carga el único `.env` de la raíz. Docker recibe esas variables
+mediante Compose.
+
 Para ejecutar todo en Docker:
 
 ```bash
+cd frontend
+flutter build web --release
+cd ..
 docker compose up --build -d
 curl http://localhost:3000/health
 ```
-
-### Migración desde PostgreSQL 17
-
-PostgreSQL 18 usa el volumen `postgres18_data`, montado en
-`/var/lib/postgresql`. El volumen anterior `postgres_data` se conserva como
-respaldo; no se puede reutilizar directamente como directorio de PostgreSQL 18.
-En otras instalaciones con datos en PostgreSQL 17, detén la API y exporta la
-base con `pg_dump -Fc` y los roles con `pg_dumpall --roles-only` antes de cambiar
-el contenedor. Restaura primero los roles (omitiendo la creación de roles que
-ya existan) y luego la base con `pg_restore` en una base vacía de PostgreSQL 18.
-Comprueba los datos antes de iniciar la API. Un volumen nuevo sin restauración
-inicia una base vacía.
-
-En el entorno local, la migración del 8 de septiembre de 2026 conserva el
-volumen `hevy-app_postgres_data` y los respaldos en `backups/` (excluidos de Git).
-Se verificaron los conteos de las 11 tablas tras restaurar datos y roles.
 
 Para guardar una sesión:
 
 ```bash
 curl -X POST http://localhost:3000/workout-sessions \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H "content-type: application/json" \
   -d '{"routineName":"Lunes","startedAt":"2026-08-07T20:00:00Z","completedAt":"2026-08-07T20:45:00Z","durationSeconds":2700,"exercises":[{"name":"Press Banca Inclinado Con Barra","muscleGroup":"Pecho","sets":[{"type":"normal","kg":40,"reps":6,"completed":true}]}]}'
 ```
@@ -87,33 +124,5 @@ curl -X POST http://localhost:3000/workout-sessions \
 Para consultar la última ejecución de un ejercicio:
 
 ```bash
-curl "http://localhost:3000/exercises/previous?name=Press%20Banca%20Inclinado%20Con%20Barra"
+curl -H "Authorization: Bearer $SESSION_TOKEN" "http://localhost:3000/exercises/previous?name=Press%20Banca%20Inclinado%20Con%20Barra"
 ```
-
-## Flutter
-
-```bash
-cd frontend
-flutter pub get
-flutter run
-```
-
-Flutter lee y escribe siempre mediante la API. El emulador Android usa
-`http://10.0.2.2:3000` automáticamente y las aplicaciones de escritorio usan
-`http://localhost:3000`.
-
-Para un dispositivo físico indica una URL accesible desde el teléfono:
-
-```bash
-flutter run --dart-define=API_BASE_URL=http://192.168.1.10:3000
-```
-
-## Cloudflare Tunnel (opcional)
-
-1. Crea un túnel en Cloudflare y copia su token.
-2. Copia `.env.example` a `.env` y reemplaza el token.
-3. Asocia un hostname público a `http://api:3000`.
-4. Ejecuta `docker compose --profile tunnel up --build -d`.
-
-No publiques PostgreSQL (`5432`) en producción. La app debe conectarse a la API,
-nunca directamente a la base de datos.

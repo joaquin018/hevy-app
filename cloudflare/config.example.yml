@@ -1,9 +1,0 @@
-tunnel: REPLACE_WITH_TUNNEL_ID
-credentials-file: /etc/cloudflared/credentials.json
-
-ingress:
-  - hostname: api.example.com
-    service: http://api:3000
-  - hostname: sync.example.com
-    service: http://powersync:8080
-  - service: http_status:404

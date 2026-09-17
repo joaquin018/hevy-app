@@ -1,0 +1,6 @@
+*
+!nginx.conf
+!build/
+build/*
+!build/web/
+!build/web/**

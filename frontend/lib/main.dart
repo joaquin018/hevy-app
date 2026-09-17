@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'src/app.dart';
+import 'app.dart';
+import 'auth_controller.dart';
 
-void main() {
-  runApp(const ProviderScope(child: HelloApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  AuthController.instance.onSessionEnded = clearActiveWorkout;
+  await AuthController.instance.restore();
+  runApp(const HelloApp());
 }
