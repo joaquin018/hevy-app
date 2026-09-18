@@ -12,7 +12,8 @@ Estructura:
 - `frontend/web`: arranque, manifiesto e iconos de la PWA.
 - `frontend/assets`: recursos de la aplicación.
 - `backend/*.ts`: API, esquema y migración.
-- `docker-compose.yml` y `postgres-init.sql`: servicios e inicialización de datos.
+- `backend/init.sql`: inicialización automática e idempotente de la base.
+- `docker-compose.yml`: entorno local opcional.
 
 Flutter genera `.dart_tool` y `build`; no se versionan. Los respaldos locales
 están fuera del repositorio en `C:\0Antigravity\hevy-app-db-backups`.
@@ -20,16 +21,12 @@ están fuera del repositorio en `C:\0Antigravity\hevy-app-db-backups`.
 ### Ejecutar la versión web
 
 ```powershell
-cd frontend
-flutter pub get
-flutter build web --release
-cd ..
 docker compose up -d --build api web
 ```
 
-Abre http://localhost:5173. Después de modificar Dart, repite la compilación y
-`docker compose up -d --build web`. El contenedor sirve `frontend/build/web`:
-el SDK Flutter se utiliza localmente y no hace falta dentro de Nginx.
+Abre http://localhost:5173. Después de modificar Dart, ejecuta
+`docker compose up -d --build web`. Docker compila Flutter desde el código;
+la imagen final solo contiene Nginx y la aplicación compilada.
 
 La web usa `/api` en el mismo origen y Google usa cookies HttpOnly.
 Configura `WEB_ORIGIN=http://localhost:5173`
@@ -43,6 +40,58 @@ La PWA incluye manifiesto e iconos para instalarla desde el navegador con HTTPS
 (o localhost). Necesita conexión para cargar y guardar datos. El worker no
 almacena respuestas privadas ni ofrece uso sin conexión. Las actualizaciones
 se cargan al reabrir o recargar; no se fuerza una recarga durante un entrenamiento.
+Mientras está abierta, comprueba nuevas versiones cada minuto y al volver a
+primer plano. Muestra un botón para actualizar después de guardar los cambios.
+El identificador de versión se genera en Docker a partir del contenido compilado.
+
+## Dokploy: dos Applications y PostgreSQL
+
+Usa el mismo repositorio y rama para ambas Applications, con build type Dockerfile.
+
+| Application | Dockerfile Path | Docker Context Path | Puerto interno |
+| --- | --- | --- | --- |
+| frontend | frontend/Dockerfile | frontend | 80 |
+| backend | backend/Dockerfile | backend | 3000 |
+
+En `db`, crea PostgreSQL con almacenamiento persistente. Copia su URL interna
+a `DATABASE_URL` del backend. La API crea las tablas al arrancar, bajo un bloqueo
+transaccional, sin borrar datos existentes. No hace falta importar SQL a mano.
+
+Variables del backend:
+
+```dotenv
+DATABASE_URL=postgresql://USUARIO:CLAVE@HOST_INTERNO_DB:5432/BASE
+PORT=3000
+WEB_ORIGIN=https://gym.example.com
+GOOGLE_REDIRECT_URI=https://gym.example.com/api/auth/google/callback
+GOOGLE_CLIENT_ID=CLIENT_ID
+GOOGLE_CLIENT_SECRET=CLIENT_SECRET
+SKIP_LOGIN=false
+```
+
+Variable del frontend:
+
+```dotenv
+BACKEND_ORIGIN=http://NOMBRE_INTERNO_APPLICATION_BACKEND:3000
+```
+
+Usa el nombre interno real de Dokploy, sin barra final ni `/api`. Los tres
+servicios deben poder comunicarse por la red interna de Dokploy. Asigna el
+dominio público y HTTPS solo al frontend, puerto 80; no publiques PostgreSQL.
+Registra la URI de retorno en Google Cloud. Despliega primero db, luego backend
+y finalmente frontend. `/api/health` debe devolver `{"status":"ok"}`.
+
+Para probar sin Google, `SKIP_LOGIN=true` da acceso a todos al mismo usuario local.
+No migra datos desde tu PC: si quieres conservarlos, restaura un respaldo en db.
+
+Activa Auto Deploy/webhook para ambas Applications si quieres que un push a
+la rama configurada publique los cambios. La PWA detecta el nuevo frontend
+después de un despliegue exitoso; un push por sí solo no cambia la app instalada.
+Conserva compatibilidad de la API con pestañas que aún usen la versión anterior.
+No configures una CDN para ignorar las cabeceras `Cache-Control` del servidor.
+
+Referencias: [Flutter web y caché](https://docs.flutter.dev/platform-integration/web/faq),
+[Applications de Dokploy](https://docs.dokploy.com/docs/core/applications).
 
 ### Validación
 

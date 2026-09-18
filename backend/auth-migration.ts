@@ -1,8 +1,10 @@
 import type { Sql } from 'postgres';
 
 export async function migrateAuth(client: Sql) {
+  const schema = await Bun.file(new URL('./init.sql', import.meta.url)).text();
   await client.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(7132048)`;
+    await tx.unsafe(schema);
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject TEXT`;
     await tx`CREATE UNIQUE INDEX IF NOT EXISTS users_google_subject_idx ON users(google_subject)`;
