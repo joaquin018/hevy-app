@@ -19,5 +19,6 @@ export async function migrateAuth(client: Sql) {
       status TEXT NOT NULL DEFAULT 'pending', expires_at TIMESTAMPTZ NOT NULL
     )`;
     await tx`CREATE INDEX IF NOT EXISTS login_attempts_expiry_idx ON login_attempts(expires_at)`;
+    await tx`ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS browser_flow BOOLEAN NOT NULL DEFAULT FALSE`;
   });
 }

@@ -33,7 +33,8 @@ Configura `WEB_ORIGIN=http://localhost:5173`
 y `GOOGLE_REDIRECT_URI=http://localhost:5173/api/auth/google/callback` en `.env`.
 Consulta [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md).
 
-`SKIP_LOGIN=true` en la API conserva el acceso temporal con el usuario local.
+`SKIP_LOGIN=true` en la API conserva el acceso temporal con el usuario local,
+solo si `WEB_ORIGIN` apunta a localhost.
 Para exigir Google, cambia a `false` y recrea el servicio `api`.
 
 La PWA incluye manifiesto e iconos para instalarla desde el navegador con HTTPS
@@ -81,7 +82,8 @@ dominio público y HTTPS solo al frontend, puerto 80; no publiques PostgreSQL.
 Registra la URI de retorno en Google Cloud. Despliega primero db, luego backend
 y finalmente frontend. `/api/health` debe devolver `{"status":"ok"}`.
 
-Para probar sin Google, `SKIP_LOGIN=true` da acceso a todos al mismo usuario local.
+Para probar sin Google en localhost, `SKIP_LOGIN=true` da acceso al usuario local.
+El backend rechaza este modo con un `WEB_ORIGIN` público.
 No migra datos desde tu PC: si quieres conservarlos, restaura un respaldo en db.
 
 Activa Auto Deploy/webhook para ambas Applications si quieres que un push a
@@ -128,9 +130,13 @@ Los resultados inferiores permanecen en el historial, pero no reemplazan la
 referencia que aparece en la columna `Anterior`.
 
 Cada cuenta accede con Google y utiliza su correo verificado como nombre.
+Las cuentas nuevas empiezan vacías. Con `LEGACY_OWNER_EMAIL` vacío, los datos
+antiguos del usuario compartido se conservan sin asignarse a ninguna cuenta nueva.
 Rutinas, ejercicios, borradores, historial y récords se filtran por el usuario
-de la sesión autenticada. Consulta [la configuración de Google](GOOGLE_AUTH_SETUP.md)
-para crear las credenciales y asignar explícitamente los datos de desarrollo.
+de la sesión autenticada. La API rechaza peticiones de una pestaña que todavía
+muestra una cuenta distinta de la cookie actual. Consulta
+[la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
+`app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
 
 ## API y PostgreSQL
 

@@ -87,7 +87,7 @@ class WorkoutApi {
   WorkoutApi({http.Client? client})
     : _client = AuthenticatedClient(
         client ?? http.Client(),
-        AuthController.instance.session?.token,
+        AuthController.instance.session,
       );
 
   final http.Client _client;

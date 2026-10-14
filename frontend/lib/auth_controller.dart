@@ -253,8 +253,8 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void expire(String token) {
-    if (session?.token != token) return;
+  void expire(UserSession expectedSession) {
+    if (!identical(session, expectedSession)) return;
     onSessionEnded?.call();
     session = null;
     error = 'Tu sesión caducó. Vuelve a entrar con Google.';
@@ -270,21 +270,33 @@ class AuthFailure implements Exception {
   final String message;
 }
 
-// Capture the token when creating the API so pending work can never switch accounts.
+// Bind requests to the account displayed when this API client was created.
 class AuthenticatedClient extends http.BaseClient {
-  AuthenticatedClient(this.inner, this.token);
+  AuthenticatedClient(this.inner, this.session);
   final http.Client inner;
-  final String? token;
+  final UserSession? session;
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    if (token != null && token!.isNotEmpty) {
-      request.headers['authorization'] = 'Bearer $token';
+    final expectedSession = session;
+    if (expectedSession != null) {
+      if (!identical(AuthController.instance.session, expectedSession)) {
+        throw const AuthFailure('La cuenta cambió. Vuelve a abrir la app.');
+      }
+      request.headers['x-i7l-user'] = expectedSession.id;
+      if (expectedSession.token.isNotEmpty) {
+        request.headers['authorization'] = 'Bearer ${expectedSession.token}';
+      }
     }
     final response = await inner
         .send(request)
         .timeout(const Duration(seconds: 20));
-    if (response.statusCode == 401 && token != null) {
-      AuthController.instance.expire(token!);
+    if (expectedSession != null &&
+        (response.statusCode == 401 || response.statusCode == 409)) {
+      AuthController.instance.expire(expectedSession);
+    }
+    if (expectedSession != null &&
+        !identical(AuthController.instance.session, expectedSession)) {
+      throw const AuthFailure('La cuenta cambió. Vuelve a abrir la app.');
     }
     return response;
   }

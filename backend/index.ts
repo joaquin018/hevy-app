@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { buildWorkoutHistory } from './workout-history.ts';
-import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, type Database, type AuthConfig, type GoogleProvider } from './auth.ts';
+import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, validateAuthConfig, type Database, type AuthConfig, type GoogleProvider } from './auth.ts';
 import { migrateAuth } from './auth-migration.ts';
 
 import {
@@ -22,13 +22,19 @@ const port = Number(process.env.PORT ?? 3000);
 const databaseUrl = process.env.DATABASE_URL ??
   'postgres://hevy:hevy_dev_password@localhost:5432/hevy';
 export function createApp(db: Database, config: AuthConfig, provider?: GoogleProvider) {
-const app = new Elysia().onRequest(({ request, status }) => {
+validateAuthConfig(config);
+const app = new Elysia().onRequest(({ request, status, set }) => {
+  set.headers['cache-control'] = 'no-store';
   if (rejectCrossOrigin(request, config)) return status(403, { message: 'Origen no permitido.' });
 }).use(authRoutes(db, config, provider)).resolve(async ({ headers, status }) => {
   const user = await authenticate(db, requestAuthorization(headers), config.skipLogin);
   if (!user) return status(401, { message: 'Inicia sesión para continuar.' });
+  // A cookie can change in another tab while this tab still displays the old account.
+  if (headers['x-i7l-user'] && headers['x-i7l-user'] !== user.id) {
+    return status(409, { code: 'SESSION_CHANGED', message: 'La cuenta cambió. Vuelve a iniciar sesión.' });
+  }
   return { userId: user.id };
-}).onAfterHandle(({ set }) => { set.headers['cache-control'] = 'no-store'; });
+});
 
 const normalizeName = (name: string) => name.trim().toLocaleLowerCase('es');
 

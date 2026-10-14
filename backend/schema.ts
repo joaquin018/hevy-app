@@ -29,6 +29,7 @@ export const loginAttempts = pgTable('login_attempts', {
   state: text('state').notNull().unique(),
   nonce: text('nonce').notNull(),
   verifier: text('verifier').notNull(),
+  browserFlow: boolean('browser_flow').notNull().default(false),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   status: text('status').notNull().default('pending'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

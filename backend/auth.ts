@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { OAuth2Client, CodeChallengeMethod } from 'google-auth-library';
 import { Elysia, t } from 'elysia';
-import { and, eq, gt, lt, isNull } from 'drizzle-orm';
+import { and, eq, gt, lt, isNull, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { authSessions, loginAttempts, users } from './schema.ts';
 
@@ -15,6 +15,16 @@ export type GoogleProvider = {
 export const tokenHash = (value: string) => createHash('sha256').update(value).digest('hex');
 const randomToken = () => randomBytes(32).toString('base64url');
 const legacyUserId = '00000000-0000-4000-8000-000000000001';
+
+export function validateAuthConfig(config: AuthConfig) {
+  if (!config.skipLogin) return;
+  let origin: URL | undefined;
+  try { origin = new URL(config.webOrigin ?? ''); } catch { /* Fail closed below. */ }
+  if (!origin || !['http:', 'https:'].includes(origin.protocol) ||
+      !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) {
+    throw new Error('SKIP_LOGIN=true solo se permite en desarrollo con WEB_ORIGIN en localhost. Usa SKIP_LOGIN=false en el dominio público.');
+  }
+}
 
 export function readCookie(header: string | undefined, name: string) {
   return header?.split(';').map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -68,10 +78,10 @@ export async function authenticate(db: Database, authorization?: string, skipLog
 export function authRoutes(db: Database, config: AuthConfig, provider = googleProvider(config)) {
   const configured = Boolean(config.clientId && config.clientSecret && config.redirectUri);
   const starts = new Map<string, { count: number; until: number }>();
-  const app = new Elysia().onRequest(({ request, status }) => {
+  const app = new Elysia().onRequest(({ request, status, set }) => {
+    set.headers['cache-control'] = 'no-store';
     if (rejectCrossOrigin(request, config)) return status(403, { message: 'Origen no permitido.' });
   }).get('/health', () => ({ status: 'ok' }));
-  app.onAfterHandle(({ set }) => { set.headers['cache-control'] = 'no-store'; });
   app.post('/auth/google/start', async ({ status, server, request, set }) => {
     if (!configured) return status(503, { message: 'El acceso con Google aún no está configurado.' });
     const isWeb = new URL(request.url).searchParams.get('web') === '1';
@@ -91,7 +101,7 @@ export function authRoutes(db: Database, config: AuthConfig, provider = googlePr
     const state = randomToken();
     const nonce = randomToken();
     const verifier = randomToken();
-    await db.insert(loginAttempts).values({ tokenHash: tokenHash(attemptToken), state, nonce, verifier,
+    await db.insert(loginAttempts).values({ tokenHash: tokenHash(attemptToken), state, nonce, verifier, browserFlow: isWeb,
       expiresAt: new Date(Date.now() + 5 * 60_000) });
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const authorizationUrl = provider.authorizationUrl(state, nonce, challenge);
@@ -106,8 +116,10 @@ export function authRoutes(db: Database, config: AuthConfig, provider = googlePr
     set.headers['referrer-policy'] = 'no-referrer';
     set.headers['content-security-policy'] = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'";
     const page = (message: string) => `<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>i7l · Google</title><body style="background:#090b0f;color:white;font:18px system-ui;padding:48px;max-width:600px;margin:auto"><h1>i7l</h1><p>${message}</p></body></html>`;
+    const browserAttempt = readCookie(headers.cookie, 'i7l_login');
     const [attempt] = await db.update(loginAttempts).set({ status: 'processing' })
-      .where(and(eq(loginAttempts.state, query.state ?? ''), eq(loginAttempts.status, 'pending'), gt(loginAttempts.expiresAt, new Date())))
+      .where(and(eq(loginAttempts.state, query.state ?? ''), eq(loginAttempts.status, 'pending'), gt(loginAttempts.expiresAt, new Date()),
+        or(eq(loginAttempts.browserFlow, false), eq(loginAttempts.tokenHash, tokenHash(browserAttempt ?? '')))))
       .returning();
     if (!attempt) { set.status = 400; return page('Este acceso caducó o ya se utilizó. Vuelve a la app para intentarlo de nuevo.'); }
     try {
@@ -129,8 +141,7 @@ export function authRoutes(db: Database, config: AuthConfig, provider = googlePr
         await tx.update(loginAttempts).set({ userId: account!.id, status: 'ready', verifier: '' })
           .where(eq(loginAttempts.tokenHash, attempt.tokenHash));
       });
-      const browserAttempt = readCookie(headers.cookie, 'i7l_login');
-      if (config.webOrigin && browserAttempt && tokenHash(browserAttempt) === attempt.tokenHash) {
+      if (attempt.browserFlow && config.webOrigin) {
         const token = randomToken();
         await db.transaction(async tx => {
           const [ready] = await tx.delete(loginAttempts)

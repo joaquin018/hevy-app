@@ -121,9 +121,7 @@ class HelloApp extends StatelessWidget {
       listenable: AuthController.instance,
       builder: (context, _) => MaterialApp(
         key: ValueKey(
-          enableCloudPersistence
-              ? AuthController.instance.session?.token
-              : 'test',
+          enableCloudPersistence ? AuthController.instance.session?.id : 'test',
         ),
         debugShowCheckedModeBanner: false,
         title: 'i7l',
