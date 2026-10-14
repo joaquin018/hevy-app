@@ -1,5 +1,41 @@
 # Hevy Cloud Stack
 
+Versión actual: **v16**. Consulta el [historial de cambios](CHANGELOG.md) y las
+[releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
+
+## Versionado y publicación
+
+El proyecto conserva la numeración de etiquetas anotadas `v1`, `v2`, etc.
+Desde `v16`, la versión `vN` corresponde a `N.0.0` en `VERSION` y en
+`backend/package.json`, y a `N.0.0+N` en `frontend/pubspec.yaml`.
+Los tags anteriores mantienen los archivos y commits históricos originales.
+El hash de `deploy-version.json` identifica los archivos de un despliegue y
+complementa la versión de Git; no sustituye al tag de la release.
+
+Para publicar otra versión después de terminar los cambios (sustituye `17`
+por el siguiente número):
+
+```powershell
+bun scripts/version.mjs prepare 17
+# Añade una sección ## [v17] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v17
+# Ejecuta las comprobaciones correspondientes al cambio.
+git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
+# Incluye también los archivos de la funcionalidad en el commit.
+git commit -m 'chore: prepare release v17'
+git tag -a v17 -m 'v17: descripción de los cambios'
+git push --atomic origin master v17
+bun scripts/version.mjs notes v17 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v17 --verify-tag --title 'v17 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+Remove-Item -LiteralPath release-notes.tmp.md
+```
+
+Cada release publicada debe tener un tag anotado, manifiestos coherentes y
+notas con cambios y validación. No se mueven ni se sobrescriben etiquetas
+publicadas. Una corrección posterior recibe una versión nueva. El push
+atómico publica el commit y su tag juntos; `--verify-tag` evita que GitHub
+cree una etiqueta en un commit diferente.
+
 ## Aplicación Flutter
 
 Flutter es la única interfaz, distribuida como web/PWA.
