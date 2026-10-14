@@ -53,6 +53,16 @@ async function login(code: string) {
 }
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 const folders = (name: string) => ({ folders: [{ name, routines: [{ name: `${name} rutina`, exercises: ['Press'] }] }] });
+async function saveFolders(name: string | null, headers: Record<string, string>) {
+  const current = await (await request('/routine-library', 'GET', undefined, headers)).json();
+  const folderId = randomUUID();
+  return request('/routine-library', 'PATCH', {
+    version: current.version,
+    folders: name ? [{ id: folderId, name, position: 0 }] : [],
+    routines: name ? [{ id: randomUUID(), folderId, name: name + ' rutina', position: 0, exercises: ['Press'] }] : [],
+    deletedFolders: current.folders.map((f: { id: string }) => f.id), deletedRoutines: [],
+  }, headers);
+}
 const draft = (name: string) => ({ routineName: name, startedAt: '2026-10-14T10:00:00Z', originalExercises: ['Press'], exercises: [] });
 const workout = (name: string, kg: number) => ({
   routineName: name, startedAt: '2026-10-14T10:00:00Z', completedAt: '2026-10-14T11:00:00Z', durationSeconds: 3600,
@@ -128,7 +138,7 @@ describe('Authentication and private accounts', () => {
     const bob = await login('bob');
     for (const [account, name, kg, restSeconds] of [[alice, 'Alice', 50, 120], [bob, 'Bob', 100, 240]] as const) {
       const headers = bearer(account.token);
-      expect((await request('/routine-folders', 'PUT', folders(name), headers)).status).toBe(200);
+      expect((await saveFolders(name, headers)).status).toBe(200);
       expect((await request('/exercises', 'POST', { name: `${name} exercise`, muscleGroup: name }, headers)).status).toBe(201);
       expect((await request('/exercises/rest-timer', 'PUT', { name: 'Press', restSeconds }, headers)).status).toBe(200);
       expect((await request('/workout-draft', 'PUT', draft(name), headers)).status).toBe(200);
@@ -149,7 +159,7 @@ describe('Authentication and private accounts', () => {
       expect((await get('/exercises/previous?name=Press')).sets[0].kg).toBe(kg);
     }
     // Replacing/deleting Alice's data must leave Bob's data intact.
-    expect((await request('/routine-folders', 'PUT', { folders: [] }, bearer(alice.token))).status).toBe(200);
+    expect((await saveFolders(null, bearer(alice.token))).status).toBe(200);
     expect((await request('/workout-draft', 'DELETE', undefined, bearer(alice.token))).status).toBe(200);
     expect((await request('/workout-draft', 'GET', undefined, bearer(alice.token))).status).toBe(404);
     expect((await (await request('/workout-draft', 'GET', undefined, bearer(bob.token))).json()).routineName).toBe('Bob');

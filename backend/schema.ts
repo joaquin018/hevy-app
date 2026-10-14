@@ -1,6 +1,8 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   integer,
+  index,
   jsonb,
   numeric,
   pgTable,
@@ -15,8 +17,10 @@ export const users = pgTable('users', {
   displayName: text('display_name').notNull(),
   email: text('email'),
   googleSubject: text('google_subject').unique(),
+  routineVersion: integer('routine_version').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index('users_email_prefix_idx').on(sql`lower(${table.email}) COLLATE "C"`)
+  .where(sql`${table.googleSubject} IS NOT NULL AND ${table.email} IS NOT NULL`)]);
 
 export const authSessions = pgTable('auth_sessions', {
   tokenHash: text('token_hash').primaryKey(),
@@ -113,7 +117,7 @@ export const routineFolders = pgTable('routine_folders', {
   name: text('name').notNull(),
   position: integer('position').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index('routine_folders_user_position_idx').on(table.userId, table.position, table.id)]);
 
 export const routines = pgTable('routines', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -122,7 +126,7 @@ export const routines = pgTable('routines', {
     .references(() => routineFolders.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   position: integer('position').notNull(),
-});
+}, (table) => [index('routines_folder_position_idx').on(table.folderId, table.position, table.id)]);
 
 export const routineExercises = pgTable('routine_exercises', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -131,7 +135,31 @@ export const routineExercises = pgTable('routine_exercises', {
     .references(() => routines.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   position: integer('position').notNull(),
-});
+}, (table) => [index('routine_exercises_routine_position_idx').on(table.routineId, table.position)]);
+
+export type RoutineSnapshot = {
+  version: 1;
+  name: string;
+  exercises: { name: string; muscleGroup: string | null; restSeconds: number }[];
+};
+
+export const routineShares = pgTable('routine_shares', {
+  id: uuid('id').primaryKey(),
+  senderId: uuid('sender_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  recipientId: uuid('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sourceRoutineId: uuid('source_routine_id').references(() => routines.id, { onDelete: 'set null' }),
+  importedRoutineId: uuid('imported_routine_id').references(() => routines.id, { onDelete: 'set null' }),
+  snapshot: jsonb('snapshot').$type<RoutineSnapshot>().notNull(),
+  status: text('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+}, (table) => [
+  index('routine_shares_sender_idx').on(table.senderId, table.createdAt.desc(), table.id.desc()),
+  index('routine_shares_recipient_idx').on(table.recipientId, table.status, table.createdAt.desc(), table.id.desc()),
+  uniqueIndex('routine_shares_pending_unique_idx').on(table.senderId, table.recipientId, table.sourceRoutineId).where(sql`${table.status} = 'pending'`),
+  index('routine_shares_source_idx').on(table.sourceRoutineId).where(sql`${table.sourceRoutineId} IS NOT NULL`),
+  index('routine_shares_imported_idx').on(table.importedRoutineId).where(sql`${table.importedRoutineId} IS NOT NULL`),
+]);
 
 export const activeWorkoutDrafts = pgTable('active_workout_drafts', {
   userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),

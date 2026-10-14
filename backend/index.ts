@@ -5,14 +5,12 @@ import postgres from 'postgres';
 import { buildWorkoutHistory } from './workout-history.ts';
 import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, validateAuthConfig, type Database, type AuthConfig, type GoogleProvider } from './auth.ts';
 import { migrateAuth } from './auth-migration.ts';
+import { RoutineError, RoutineLibrary } from './routine-library.ts';
 
 import {
   activeWorkoutDrafts,
   exercises,
   exerciseRecords,
-  routineExercises,
-  routineFolders,
-  routines,
   workoutSessionExercises,
   workoutSessions,
   workoutSets,
@@ -23,7 +21,18 @@ const databaseUrl = process.env.DATABASE_URL ??
   'postgres://hevy:hevy_dev_password@localhost:5432/hevy';
 export function createApp(db: Database, config: AuthConfig, provider?: GoogleProvider) {
 validateAuthConfig(config);
-const app = new Elysia().onRequest(({ request, status, set }) => {
+const library = new RoutineLibrary(db);
+const app = new Elysia().onError(({ code, error, set }) => {
+  if (error instanceof RoutineError) {
+    set.status = error.status;
+    return { code: error.code, message: error.message };
+  }
+  if (code === 'UNKNOWN') {
+    console.error('Unhandled API error:', error.name);
+    set.status = 500;
+    return { message: 'No se pudo completar la acción. Inténtalo de nuevo.' };
+  }
+}).onRequest(({ request, status, set }) => {
   set.headers['cache-control'] = 'no-store';
   if (rejectCrossOrigin(request, config)) return status(403, { message: 'Origen no permitido.' });
 }).use(authRoutes(db, config, provider)).resolve(async ({ headers, status }) => {
@@ -235,97 +244,44 @@ app.put(
   },
 );
 
+const uuid = () => t.String({ format: 'uuid' });
+const position = () => t.Integer({ minimum: 0, maximum: 1000000 });
+app.get('/routine-library', ({ userId }) => library.read(userId));
+// Older tabs can read, but must reload before saving without a revision.
 app.get('/routine-folders', async ({ userId }) => {
-  const savedFolders = await db
-    .select()
-    .from(routineFolders)
-    .where(eq(routineFolders.userId, userId))
-    .orderBy(asc(routineFolders.position));
-
-  return Promise.all(
-    savedFolders.map(async (folder) => {
-      const savedRoutines = await db
-        .select()
-        .from(routines)
-        .where(eq(routines.folderId, folder.id))
-        .orderBy(asc(routines.position));
-      return {
-        name: folder.name,
-        routines: await Promise.all(
-          savedRoutines.map(async (routine) => ({
-            name: routine.name,
-            exercises: (
-              await db
-                .select({ name: routineExercises.name })
-                .from(routineExercises)
-                .where(eq(routineExercises.routineId, routine.id))
-                .orderBy(asc(routineExercises.position))
-            ).map((exercise) => exercise.name),
-          })),
-        ),
-      };
-    }),
-  );
+  const value = await library.read(userId);
+  return value.folders.map(folder => ({ name: folder.name,
+    routines: folder.routines.map(routine => ({ name: routine.name, exercises: routine.exercises })) }));
 });
-
-app.put(
-  '/routine-folders',
-  async ({ body, userId }) => {
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(routineFolders)
-        .where(eq(routineFolders.userId, userId));
-
-      for (const [folderPosition, inputFolder] of body.folders.entries()) {
-        const [folder] = await tx
-          .insert(routineFolders)
-          .values({
-            userId: userId,
-            name: inputFolder.name.trim(),
-            position: folderPosition,
-          })
-          .returning();
-        for (const [routinePosition, inputRoutine] of inputFolder.routines.entries()) {
-          const [routine] = await tx
-            .insert(routines)
-            .values({
-              folderId: folder.id,
-              name: inputRoutine.name.trim(),
-              position: routinePosition,
-            })
-            .returning();
-          if (inputRoutine.exercises.length > 0) {
-            await tx.insert(routineExercises).values(
-              inputRoutine.exercises.map((name, position) => ({
-                routineId: routine.id,
-                name: name.trim(),
-                position,
-              })),
-            );
-          }
-        }
-      }
-    });
-    return { saved: true };
-  },
-  {
-    body: t.Object({
-      folders: t.Array(
-        t.Object({
-          name: t.String({ minLength: 1, maxLength: 120 }),
-          routines: t.Array(
-            t.Object({
-              name: t.String({ minLength: 1, maxLength: 120 }),
-              exercises: t.Array(
-                t.String({ minLength: 1, maxLength: 160 }),
-              ),
-            }),
-          ),
-        }),
-      ),
-    }),
-  },
-);
+app.put('/routine-folders', ({ status }) => status(428, {
+  code: 'ROUTINE_UPGRADE_REQUIRED', message: 'Recarga la app para guardar tus rutinas con la nueva versión.'
+}));
+app.patch('/routine-library', ({ userId, body }) => library.patch(userId, body), {
+  body: t.Object({
+    version: t.Integer({ minimum: 0 }),
+    folders: t.Array(t.Object({ id: uuid(), name: t.String({ minLength: 1, maxLength: 120 }), position: position() }), { maxItems: 100 }),
+    deletedFolders: t.Array(uuid(), { maxItems: 100 }),
+    routines: t.Array(t.Object({ id: uuid(), folderId: uuid(), name: t.String({ minLength: 1, maxLength: 120 }), position: position(),
+      exercises: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 160 }), { maxItems: 100 })) }), { maxItems: 500 }),
+    deletedRoutines: t.Array(uuid(), { maxItems: 500 }),
+  }),
+});
+app.get('/routine-recipients', ({ userId, query }) => library.recipients(userId, query.q), {
+  query: t.Object({ q: t.String({ maxLength: 254 }) }),
+});
+app.post('/routine-shares', ({ userId, body }) => library.send(userId, body), {
+  body: t.Object({ id: uuid(), routineId: uuid(), recipientId: uuid(), version: t.Integer({ minimum: 0 }) }),
+});
+app.get('/routine-shares/pending', ({ userId }) => library.hasPending(userId));
+app.get('/routine-shares', ({ userId, query }) => library.list(userId, query.direction ?? 'received', query.cursor), {
+  query: t.Object({ direction: t.Optional(t.Union([t.Literal('received'), t.Literal('sent')])), cursor: t.Optional(t.String({ maxLength: 300 })) }),
+});
+app.get('/routine-shares/:id', ({ userId, params }) => library.detail(userId, params.id), { params: t.Object({ id: uuid() }) });
+app.post('/routine-shares/:id/accept', ({ userId, params, body }) => library.accept(userId, params.id, body.folderId), {
+  params: t.Object({ id: uuid() }), body: t.Object({ folderId: t.Optional(uuid()) }),
+});
+app.post('/routine-shares/:id/reject', ({ userId, params }) => library.resolve(userId, params.id, 'reject'), { params: t.Object({ id: uuid() }) });
+app.post('/routine-shares/:id/revoke', ({ userId, params }) => library.resolve(userId, params.id, 'revoke'), { params: t.Object({ id: uuid() }) });
 
 app.post(
   '/workout-sessions',

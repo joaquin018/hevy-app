@@ -287,11 +287,34 @@ class AuthenticatedClient extends http.BaseClient {
         request.headers['authorization'] = 'Bearer ${expectedSession.token}';
       }
     }
-    final response = await inner
+    var response = await inner
         .send(request)
         .timeout(const Duration(seconds: 20));
+    var sessionChanged = false;
+    if (response.statusCode == 409) {
+      // Business conflicts (library revisions, resolved shares) are unrelated
+      // to authentication. Preserve the consumed response for the API caller.
+      final buffered = await http.Response.fromStream(response)
+          .timeout(const Duration(seconds: 20));
+      try {
+        final value = jsonDecode(buffered.body);
+        sessionChanged = value is Map && value['code'] == 'SESSION_CHANGED';
+      } on FormatException {
+        sessionChanged = false;
+      }
+      response = http.StreamedResponse(
+        Stream.value(buffered.bodyBytes),
+        buffered.statusCode,
+        headers: buffered.headers,
+        contentLength: buffered.bodyBytes.length,
+        request: buffered.request,
+        reasonPhrase: buffered.reasonPhrase,
+        isRedirect: buffered.isRedirect,
+        persistentConnection: buffered.persistentConnection,
+      );
+    }
     if (expectedSession != null &&
-        (response.statusCode == 401 || response.statusCode == 409)) {
+        (response.statusCode == 401 || sessionChanged)) {
       AuthController.instance.expire(expectedSession);
     }
     if (expectedSession != null &&

@@ -138,6 +138,61 @@ muestra una cuenta distinta de la cookie actual. Consulta
 [la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
 `app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
 
+## Compartir rutinas dentro de i7l
+
+En las opciones de una rutina, **Compartir rutina** busca el correo de una
+cuenta registrada. La búsqueda comienza con tres caracteres, espera 350 ms
+al escribir y devuelve hasta diez coincidencias. Solo muestra identificador
+y correo; requiere sesión y tiene un límite de 30 consultas por minuto por
+cuenta. El prefijo se trata literalmente, incluidos `%` y `_`.
+
+El botón de bandeja abre **Rutinas compartidas**, con recibidas y enviadas.
+El destinatario ve una vista previa y acepta en una carpeta propia o en
+**Recibidas**, creada automáticamente. Puede rechazar; el remitente puede
+cancelar mientras el envío esté pendiente. No se envían correos ni se necesita
+un servicio adicional. Para recibir, la persona debe registrarse primero.
+
+Cada envío conserva una instantánea de nombre, ejercicios ordenados, grupo
+muscular y descanso. La aceptación crea una copia independiente sin historial,
+series ni récords, y conserva la configuración de ejercicios que el destinatario
+ya tenga. Reintentar un envío o aceptar dos veces no duplica la rutina.
+
+`routine_shares` relaciona cuentas por UUID, con índices para la bandeja del
+destinatario, enviados, duplicados pendientes y claves foráneas. La búsqueda
+usa un B-tree sobre `lower(email) COLLATE "C"`, con límites explícitos de prefijo
+que también funcionan con planes preparados. La bandeja pagina 20 resultados
+mediante fecha e identificador; el contenido se consulta al abrir la vista previa.
+El aviso consulta existencia de pendientes al abrir/volver a la app y cada
+minuto cuando la pantalla principal está visible. Los límites de búsqueda y
+envío (20 por hora) son por proceso; si se despliegan varias réplicas deberán
+coordinarse en el servidor de entrada o en un almacén compartido.
+
+Las carpetas y rutinas mantienen UUID estables. `GET /routine-library` devuelve
+la biblioteca y su versión; `PATCH /routine-library` recibe únicamente cambios
+y eliminaciones explícitas. Un bloqueo de fila por cuenta y la versión evitan
+sobrescribir cambios entre pestañas o una rutina recién aceptada. Las lecturas
+usan dos consultas coherentes, evitando una consulta por rutina. La migración
+es aditiva y conserva los datos existentes. Las pestañas antiguas pueden seguir
+leyendo `GET /routine-folders`; el antiguo `PUT` pide recargar antes de guardar.
+
+Pruebas en una base desechable, nunca en producción:
+
+```powershell
+$env:TEST_DATABASE_URL='postgres://USUARIO:CLAVE@localhost:PUERTO/BASE_DE_PRUEBAS'
+cd backend
+bun run typecheck
+bun test
+cd ../frontend
+flutter test
+flutter analyze
+flutter build web --release
+```
+
+Las pruebas crean y eliminan esquemas aislados. Cubren privacidad, permisos,
+copias, reintentos, cambios concurrentes, paginación y planes de ejecución con
+50.000 cuentas y 50.000 envíos. Los tiempos de esa prueba no representan una
+garantía de rendimiento en producción.
+
 ## API y PostgreSQL
 
 Para desarrollar el backend localmente con Bun 1.4.2:

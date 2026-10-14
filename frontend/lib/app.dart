@@ -10,6 +10,7 @@ import 'workout_api.dart';
 import 'workout_history_page.dart';
 import 'auth_controller.dart';
 import 'sign_in_page.dart';
+import 'routine_sharing_page.dart';
 
 const _accent = Color(0xFF7C8CFF);
 const _page = Color(0xFF090B0F);
@@ -153,23 +154,55 @@ class WorkoutHomePage extends StatefulWidget {
 }
 
 class _RoutineData {
-  const _RoutineData(this.name, this.exercises);
+  _RoutineData(this.name, this.exercises, {String? id})
+    : id = id ?? newRoutineId();
+
+  final String id;
 
   final String name;
   final List<String> exercises;
 }
 
-class _WorkoutHomePageState extends State<WorkoutHomePage> {
+class _FolderData {
+  _FolderData(this.name, this.routines, {String? id})
+    : id = id ?? newRoutineId();
+  final String id;
+  String name;
+  final List<_RoutineData> routines;
+}
+
+class _WorkoutHomePageState extends State<WorkoutHomePage>
+    with WidgetsBindingObserver {
   final WorkoutApi _workoutApi = WorkoutApi();
-  final List<String> _folders = [];
-  final Map<String, List<_RoutineData>> _folderRoutines = {};
+  final List<_FolderData> _folders = [];
+  RoutineLibraryPayload _library = const RoutineLibraryPayload(
+    version: 0,
+    folders: [],
+  );
+  final _saving = ValueNotifier(false);
+  bool _ready = false,
+      _loading = false,
+      _pending = false,
+      _checkingPending = false;
+  String? _loadError;
+  Timer? _pendingTimer;
 
   @override
   void initState() {
     super.initState();
+    _ready = !widget.enableCloudPersistence;
+    WidgetsBinding.instance.addObserver(this);
     if (widget.enableCloudPersistence) {
       _loadRoutineFolders();
       _loadActiveWorkoutDraft();
+      _checkPending();
+      _pendingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        if (WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed &&
+            ModalRoute.of(context)?.isCurrent == true) {
+          _checkPending();
+        }
+      });
     }
   }
 
@@ -196,61 +229,134 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     }
   }
 
-  Future<void> _loadRoutineFolders() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingTimer?.cancel();
+    _workoutApi.close();
+    _saving.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.enableCloudPersistence) {
+      _checkPending();
+    }
+  }
+
+  Future<void> _checkPending() async {
+    if (_checkingPending || !mounted) return;
+    _checkingPending = true;
     try {
-      final savedFolders = await _workoutApi.getRoutineFolders();
+      final pending = await _workoutApi.hasPendingRoutines();
+      if (mounted) setState(() => _pending = pending);
+    } catch (_) {
+      /* The inbox offers an explicit retry. */
+    } finally {
+      _checkingPending = false;
+    }
+  }
+
+  Future<void> _openSharedRoutines() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RoutineSharingPage(api: _workoutApi),
+      ),
+    );
+    if (!mounted) return;
+    await _loadRoutineFolders();
+    await _checkPending();
+  }
+
+  Future<void> _loadRoutineFolders() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final library = await _workoutApi.getRoutineLibrary();
       if (!mounted) return;
       setState(() {
+        _library = library;
+        _ready = true;
         _folders
           ..clear()
-          ..addAll(savedFolders.map((folder) => folder.name));
-        _folderRoutines
-          ..clear()
-          ..addEntries(
-            savedFolders.map(
-              (folder) => MapEntry(folder.name, [
-                for (final routine in folder.routines)
-                  _RoutineData(routine.name, routine.exercises),
-              ]),
+          ..addAll(
+            library.folders.map(
+              (folder) => _FolderData(
+                folder.name,
+                folder.routines
+                    .map(
+                      (routine) => _RoutineData(
+                        routine.name,
+                        List.of(routine.exercises),
+                        id: routine.id,
+                      ),
+                    )
+                    .toList(),
+                id: folder.id,
+              ),
             ),
           );
       });
     } catch (_) {
-      if (mounted) _showPersistenceError();
+      if (mounted) {
+        setState(() {
+          _ready = false;
+          _loadError = 'No se pudieron cargar tus rutinas. Revisa tu conexión.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _persistRoutineFolders() async {
-    if (!widget.enableCloudPersistence) return;
+    if (!widget.enableCloudPersistence || !_ready || _saving.value) return;
+    _saving.value = true;
+    final next = [
+      for (final folder in _folders)
+        RoutineFolderPayload(
+          id: folder.id,
+          name: folder.name,
+          routines: [
+            for (final routine in folder.routines)
+              RoutinePayload(
+                id: routine.id,
+                name: routine.name,
+                exercises: List.of(routine.exercises),
+              ),
+          ],
+        ),
+    ];
     try {
-      await _workoutApi.saveRoutineFolders([
-        for (final folder in _folders)
-          RoutineFolderPayload(
-            name: folder,
-            routines: [
-              for (final routine in _folderRoutines[folder]!)
-                RoutinePayload(
-                  name: routine.name,
-                  exercises: routine.exercises,
-                ),
-            ],
-          ),
-      ]);
-    } catch (_) {
-      if (mounted) _showPersistenceError();
+      final version = await _workoutApi.saveRoutineChanges(_library, next);
+      if (mounted) {
+        _library = RoutineLibraryPayload(version: version, folders: next);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      _showPersistenceError(
+        error is RoutineApiFailure
+            ? error.message
+            : 'No se pudo guardar. Revisa tu conexión y vuelve a intentarlo.',
+      );
+      await _loadRoutineFolders();
+    } finally {
+      if (mounted) _saving.value = false;
     }
   }
 
-  void _showPersistenceError() {
+  void _showPersistenceError(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFF292C34),
-          content: Text(
-            'No se pudieron sincronizar las rutinas con la nube.',
-            style: TextStyle(color: Colors.white),
-          ),
+        SnackBar(
+          backgroundColor: const Color(0xFF292C34),
+          content: Text(message, style: const TextStyle(color: Colors.white)),
         ),
       );
   }
@@ -299,14 +405,13 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     );
     if (!mounted || name == null) return;
     setState(() {
-      _folders.add(name);
-      _folderRoutines[name] = [];
+      _folders.add(_FolderData(name, []));
     });
     await _persistRoutineFolders();
   }
 
   Future<void> _renameFolder(int index) async {
-    final currentName = _folders[index];
+    final currentName = _folders[index].name;
     var updatedName = currentName;
     final name = await showDialog<String>(
       context: context,
@@ -343,15 +448,13 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     );
     if (!mounted || name == null || name == currentName) return;
     setState(() {
-      final routines = _folderRoutines.remove(currentName)!;
-      _folders[index] = name;
-      _folderRoutines[name] = routines;
+      _folders[index].name = name;
     });
     await _persistRoutineFolders();
   }
 
   Future<void> _deleteFolder(int index) async {
-    final folder = _folders[index];
+    final folder = _folders[index].name;
     final confirmed = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.82),
@@ -385,7 +488,6 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
     if (!mounted || confirmed != true) return;
     setState(() {
       _folders.removeAt(index);
-      _folderRoutines.remove(folder);
     });
     await _persistRoutineFolders();
   }
@@ -413,25 +515,13 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
   }
 
   Future<void> _reorderFolders() async {
-    final folders = await Navigator.of(context).push<List<String>>(
-      MaterialPageRoute<List<String>>(
-        builder: (_) => _ReorderFoldersPage(
-          folders: _folders,
-          routineCounts: {
-            for (final folder in _folders)
-              folder: _folderRoutines[folder]!.length,
-          },
-        ),
+    final folders = await Navigator.of(context).push<List<_FolderData>>(
+      MaterialPageRoute<List<_FolderData>>(
+        builder: (_) => _ReorderFoldersPage(folders: _folders),
       ),
     );
     if (!mounted || folders == null) return;
     setState(() {
-      final removedFolders = _folders.where(
-        (folder) => !folders.contains(folder),
-      );
-      for (final folder in removedFolders) {
-        _folderRoutines.remove(folder);
-      }
       _folders
         ..clear()
         ..addAll(folders);
@@ -441,104 +531,166 @@ class _WorkoutHomePageState extends State<WorkoutHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _AtmosphericBackground(
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _RoutinesHeader(
-                onCreateFolder: _createFolder,
-                onHistory: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => WorkoutHistoryScreen(
-                        loadHistory: widget.enableCloudPersistence
-                            ? (offset) => _workoutApi.getHistory(offset: offset)
-                            : null,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              Expanded(
-                child: _folders.isEmpty
-                    ? _EmptyFolders(onCreateFolder: _createFolder)
-                    : ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          18,
-                          18,
-                          18,
-                          MediaQuery.paddingOf(context).bottom + 36,
+    return ValueListenableBuilder<bool>(
+      valueListenable: _saving,
+      builder: (context, saving, _) => AbsorbPointer(
+        absorbing: saving,
+        child: Scaffold(
+          body: _AtmosphericBackground(
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  _RoutinesHeader(
+                    onCreateFolder: _ready ? _createFolder : null,
+                    onShared: widget.enableCloudPersistence
+                        ? _openSharedRoutines
+                        : null,
+                    pending: _pending,
+                    onHistory: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => WorkoutHistoryScreen(
+                            loadHistory: widget.enableCloudPersistence
+                                ? (offset) =>
+                                      _workoutApi.getHistory(offset: offset)
+                                : null,
+                          ),
                         ),
-                        itemCount: _folders.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final folder = _folders[index];
-                          return Material(
-                            color: Colors.transparent,
-                            child: ListTile(
-                              key: ValueKey('carpeta-$folder'),
-                              onTap: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => _RoutineFolderPage(
-                                      name: folder,
-                                      routines: _folderRoutines[folder]!,
-                                      onChanged: _persistRoutineFolders,
-                                    ),
+                      );
+                    },
+                  ),
+                  Expanded(
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _loadError != null
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    _loadError!,
+                                    textAlign: TextAlign.center,
                                   ),
-                                );
-                                if (mounted) setState(() {});
-                              },
-                              tileColor: _surface,
-                              shape: RoundedRectangleBorder(
-                                side: const BorderSide(color: _border),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
-                              ),
-                              leading: const Icon(
-                                Icons.folder_outlined,
-                                color: _accent,
-                                size: 30,
-                              ),
-                              title: Text(
-                                folder,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
                                 ),
-                              ),
-                              subtitle: Text(
-                                _folderRoutines[folder]!.isEmpty
-                                    ? 'Sin rutinas'
-                                    : '${_folderRoutines[folder]!.length} rutinas',
-                                style: const TextStyle(color: _muted),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    key: ValueKey('opciones-carpeta-$folder'),
-                                    onPressed: () => _openFolderOptions(index),
-                                    tooltip: 'Opciones de carpeta',
-                                    icon: const Icon(
-                                      Icons.more_vert,
-                                      color: Colors.white,
-                                      size: 24,
+                                FilledButton(
+                                  onPressed: _loadRoutineFolders,
+                                  child: const Text('Reintentar'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _folders.isEmpty
+                        ? _EmptyFolders(onCreateFolder: _createFolder)
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              18,
+                              18,
+                              18,
+                              MediaQuery.paddingOf(context).bottom + 36,
+                            ),
+                            itemCount: _folders.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final folder = _folders[index];
+                              return Material(
+                                color: Colors.transparent,
+                                child: ListTile(
+                                  key: ValueKey('carpeta-${folder.id}'),
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => _RoutineFolderPage(
+                                          name: folder.name,
+                                          routines: folder.routines,
+                                          onChanged: _persistRoutineFolders,
+                                          saving: _saving,
+                                          onShare: widget.enableCloudPersistence
+                                              ? (routine) async {
+                                                  final stale =
+                                                      await showRoutineShareDialog(
+                                                        context,
+                                                        api: _workoutApi,
+                                                        routineId: routine.id,
+                                                        routineName:
+                                                            routine.name,
+                                                        version:
+                                                            _library.version,
+                                                      );
+                                                  if (stale && mounted) {
+                                                    Navigator.of(this.context)
+                                                        .popUntil(
+                                                          (route) =>
+                                                              route.isFirst,
+                                                        );
+                                                    _showPersistenceError(
+                                                      'Tus rutinas cambiaron. Se actualizará la lista antes de compartir.',
+                                                    );
+                                                    await _loadRoutineFolders();
+                                                  }
+                                                }
+                                              : null,
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted) setState(() {});
+                                  },
+                                  tileColor: _surface,
+                                  shape: RoundedRectangleBorder(
+                                    side: const BorderSide(color: _border),
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 12,
+                                  ),
+                                  leading: const Icon(
+                                    Icons.folder_outlined,
+                                    color: _accent,
+                                    size: 30,
+                                  ),
+                                  title: Text(
+                                    folder.name,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                  subtitle: Text(
+                                    folder.routines.isEmpty
+                                        ? 'Sin rutinas'
+                                        : '${folder.routines.length} rutinas',
+                                    style: const TextStyle(color: _muted),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        key: ValueKey(
+                                          'opciones-carpeta-${folder.id}',
+                                        ),
+                                        onPressed: () =>
+                                            _openFolderOptions(index),
+                                        tooltip: 'Opciones de carpeta',
+                                        icon: const Icon(
+                                          Icons.more_vert,
+                                          color: Colors.white,
+                                          size: 24,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -551,11 +703,15 @@ class _RoutineFolderPage extends StatefulWidget {
     required this.name,
     required this.routines,
     required this.onChanged,
+    required this.saving,
+    this.onShare,
   });
 
   final String name;
   final List<_RoutineData> routines;
   final Future<void> Function() onChanged;
+  final ValueListenable<bool> saving;
+  final Future<void> Function(_RoutineData)? onShare;
 
   @override
   State<_RoutineFolderPage> createState() => _RoutineFolderPageState();
@@ -565,6 +721,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
   Future<void> _openWorkout({
     required List<String> exercises,
     required String routineName,
+    String? routineId,
     DateTime? resumeStartedAt,
     List<String>? originalExercises,
     Map<String, List<WorkoutSetPayload>> initialResults = const {},
@@ -582,15 +739,16 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
           ),
         )
         .then((updatedExercises) async {
-          if (!mounted || updatedExercises == null) return;
+          if (!mounted || updatedExercises == null || routineId == null) return;
           final index = widget.routines.indexWhere(
-            (routine) => routine.name == routineName,
+            (routine) => routine.id == routineId,
           );
           if (index < 0) return;
           setState(() {
             widget.routines[index] = _RoutineData(
               routineName,
               updatedExercises,
+              id: widget.routines[index].id,
             );
           });
           await widget.onChanged();
@@ -600,7 +758,11 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
   Future<void> _startRoutine(_RoutineData routine) async {
     final active = _activeWorkout.value;
     if (active == null) {
-      _openWorkout(exercises: routine.exercises, routineName: routine.name);
+      _openWorkout(
+        exercises: routine.exercises,
+        routineName: routine.name,
+        routineId: routine.id,
+      );
       return;
     }
 
@@ -683,7 +845,11 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
       return;
     }
     _activeWorkout.value = null;
-    _openWorkout(exercises: routine.exercises, routineName: routine.name);
+    _openWorkout(
+      exercises: routine.exercises,
+      routineName: routine.name,
+      routineId: routine.id,
+    );
   }
 
   Future<void> _createRoutine() async {
@@ -771,7 +937,11 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     );
     if (!mounted || name == null || name == routine.name) return;
     setState(() {
-      widget.routines[index] = _RoutineData(name, routine.exercises);
+      widget.routines[index] = _RoutineData(
+        name,
+        routine.exercises,
+        id: routine.id,
+      );
     });
     await widget.onChanged();
   }
@@ -800,7 +970,11 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
     );
     if (!mounted || exercises == null) return;
     setState(() {
-      widget.routines[index] = _RoutineData(routine.name, exercises);
+      widget.routines[index] = _RoutineData(
+        routine.name,
+        exercises,
+        id: routine.id,
+      );
     });
     await widget.onChanged();
   }
@@ -851,14 +1025,19 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (_) =>
-          const _ItemManagementSheet(itemType: 'rutina', canReorder: true),
+      builder: (_) => _ItemManagementSheet(
+        itemType: 'rutina',
+        canReorder: true,
+        canShare: widget.onShare != null,
+      ),
     );
     if (!mounted || action == null) return;
     if (action == _ItemManagementAction.reorder) {
       await _reorderRoutines();
     } else if (action == _ItemManagementAction.rename) {
       await _renameRoutine(index);
+    } else if (action == _ItemManagementAction.share) {
+      await widget.onShare?.call(widget.routines[index]);
     } else {
       await _deleteRoutine(index);
     }
@@ -881,61 +1060,72 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBody: true,
-      body: _AtmosphericBackground(
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _FolderHeader(name: widget.name, onCreateRoutine: _createRoutine),
-              Expanded(
-                child: widget.routines.isEmpty
-                    ? _EmptyRoutines(onCreateRoutine: _createRoutine)
-                    : ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          18,
-                          18,
-                          18,
-                          MediaQuery.paddingOf(context).bottom + 36,
-                        ),
-                        itemCount: widget.routines.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final routine = widget.routines[index];
-                          return _RoutineCard(
-                            day: routine.name,
-                            exercises: routine.exercises,
-                            onOptions: () => _openRoutineOptions(index),
-                            onEdit: () => _editRoutine(index),
-                            onStart: () => _startRoutine(routine),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: ValueListenableBuilder<_ActiveWorkout?>(
-        valueListenable: _activeWorkout,
-        builder: (context, activeWorkout, _) {
-          if (activeWorkout == null) return const SizedBox.shrink();
-          return _ActiveWorkoutBanner(
-            workout: activeWorkout,
-            onResume: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => WorkoutPage(
-                  initialExercises: activeWorkout.exercises,
-                  originalExercises: activeWorkout.originalExercises,
-                  routineName: activeWorkout.routineName,
-                  resumeStartedAt: activeWorkout.startedAt,
-                  initialResults: activeWorkout.results,
-                ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.saving,
+      builder: (context, saving, _) => AbsorbPointer(
+        absorbing: saving,
+        child: Scaffold(
+          extendBody: true,
+          body: _AtmosphericBackground(
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  _FolderHeader(
+                    name: widget.name,
+                    onCreateRoutine: _createRoutine,
+                  ),
+                  Expanded(
+                    child: widget.routines.isEmpty
+                        ? _EmptyRoutines(onCreateRoutine: _createRoutine)
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              18,
+                              18,
+                              18,
+                              MediaQuery.paddingOf(context).bottom + 36,
+                            ),
+                            itemCount: widget.routines.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 14),
+                            itemBuilder: (context, index) {
+                              final routine = widget.routines[index];
+                              return _RoutineCard(
+                                key: ValueKey(routine.id),
+                                day: routine.name,
+                                exercises: routine.exercises,
+                                onOptions: () => _openRoutineOptions(index),
+                                onEdit: () => _editRoutine(index),
+                                onStart: () => _startRoutine(routine),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
             ),
-          );
-        },
+          ),
+          bottomNavigationBar: ValueListenableBuilder<_ActiveWorkout?>(
+            valueListenable: _activeWorkout,
+            builder: (context, activeWorkout, _) {
+              if (activeWorkout == null) return const SizedBox.shrink();
+              return _ActiveWorkoutBanner(
+                workout: activeWorkout,
+                onResume: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => WorkoutPage(
+                      initialExercises: activeWorkout.exercises,
+                      originalExercises: activeWorkout.originalExercises,
+                      routineName: activeWorkout.routineName,
+                      resumeStartedAt: activeWorkout.startedAt,
+                      initialResults: activeWorkout.results,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -947,10 +1137,14 @@ class _RoutinesHeader extends StatelessWidget {
   const _RoutinesHeader({
     required this.onCreateFolder,
     required this.onHistory,
+    this.onShared,
+    this.pending = false,
   });
 
-  final VoidCallback onCreateFolder;
+  final VoidCallback? onCreateFolder;
   final VoidCallback onHistory;
+  final VoidCallback? onShared;
+  final bool pending;
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1193,16 @@ class _RoutinesHeader extends StatelessWidget {
                   }
                 }
               },
+            ),
+          if (onShared != null)
+            IconButton(
+              key: const ValueKey('abrir-rutinas-compartidas'),
+              tooltip: 'Rutinas compartidas',
+              onPressed: onShared,
+              icon: Badge(
+                isLabelVisible: pending,
+                child: const Icon(Icons.inbox_outlined, color: _accent),
+              ),
             ),
           IconButton(
             key: const ValueKey('abrir-historial'),
@@ -1061,13 +1265,18 @@ class _EmptyFolders extends StatelessWidget {
   }
 }
 
-enum _ItemManagementAction { reorder, rename, delete }
+enum _ItemManagementAction { reorder, rename, delete, share }
 
 class _ItemManagementSheet extends StatelessWidget {
-  const _ItemManagementSheet({required this.itemType, this.canReorder = false});
+  const _ItemManagementSheet({
+    required this.itemType,
+    this.canReorder = false,
+    this.canShare = false,
+  });
 
   final String itemType;
   final bool canReorder;
+  final bool canShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,6 +1289,13 @@ class _ItemManagementSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (canShare)
+                _ExerciseOption(
+                  icon: Icons.send_outlined,
+                  label: 'Compartir rutina',
+                  onTap: () =>
+                      Navigator.of(context).pop(_ItemManagementAction.share),
+                ),
               if (canReorder)
                 _ExerciseOption(
                   icon: Icons.swap_vert,
@@ -1189,6 +1405,7 @@ class _EmptyRoutines extends StatelessWidget {
 
 class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
+    super.key,
     required this.day,
     required this.exercises,
     required this.onOptions,
@@ -3338,20 +3555,16 @@ class _ReorderRoutinesPage extends StatefulWidget {
 }
 
 class _ReorderFoldersPage extends StatefulWidget {
-  const _ReorderFoldersPage({
-    required this.folders,
-    required this.routineCounts,
-  });
+  const _ReorderFoldersPage({required this.folders});
 
-  final List<String> folders;
-  final Map<String, int> routineCounts;
+  final List<_FolderData> folders;
 
   @override
   State<_ReorderFoldersPage> createState() => _ReorderFoldersPageState();
 }
 
 class _ReorderFoldersPageState extends State<_ReorderFoldersPage> {
-  late final List<String> _folders = List.of(widget.folders);
+  late final List<_FolderData> _folders = List.of(widget.folders);
 
   @override
   Widget build(BuildContext context) {
@@ -3398,18 +3611,18 @@ class _ReorderFoldersPageState extends State<_ReorderFoldersPage> {
                 },
                 itemBuilder: (context, index) {
                   final folder = _folders[index];
-                  final routineCount = widget.routineCounts[folder] ?? 0;
+                  final routineCount = folder.routines.length;
                   return ListTile(
-                    key: ValueKey('reordenar-carpeta-$folder'),
+                    key: ValueKey('reordenar-carpeta-${folder.id}'),
                     leading: IconButton(
-                      key: ValueKey('quitar-carpeta-$folder'),
+                      key: ValueKey('quitar-carpeta-${folder.id}'),
                       onPressed: () => setState(() => _folders.removeAt(index)),
                       icon: const Icon(
                         Icons.remove_circle,
                         color: Color(0xFFFF5C4D),
                       ),
                     ),
-                    title: Text(folder),
+                    title: Text(folder.name),
                     subtitle: Text(
                       routineCount == 0
                           ? 'Sin rutinas'
@@ -3417,7 +3630,7 @@ class _ReorderFoldersPageState extends State<_ReorderFoldersPage> {
                       style: const TextStyle(color: _muted),
                     ),
                     trailing: ReorderableDragStartListener(
-                      key: ValueKey('arrastrar-carpeta-$folder'),
+                      key: ValueKey('arrastrar-carpeta-${folder.id}'),
                       index: index,
                       child: const Padding(
                         padding: EdgeInsets.all(12),
@@ -3501,7 +3714,7 @@ class _ReorderRoutinesPageState extends State<_ReorderRoutinesPage> {
                 itemBuilder: (context, index) {
                   final routine = _routines[index];
                   return ListTile(
-                    key: ValueKey('reordenar-rutina-${routine.name}'),
+                    key: ValueKey('reordenar-rutina-${routine.id}'),
                     leading: IconButton(
                       key: ValueKey('quitar-rutina-${routine.name}'),
                       onPressed: () =>

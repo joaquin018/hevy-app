@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import { migrateRoutines } from './routine-migration.ts';
 
 export async function migrateAuth(client: Sql) {
   const schema = await Bun.file(new URL('./init.sql', import.meta.url)).text();
@@ -20,5 +21,6 @@ export async function migrateAuth(client: Sql) {
     )`;
     await tx`CREATE INDEX IF NOT EXISTS login_attempts_expiry_idx ON login_attempts(expires_at)`;
     await tx`ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS browser_flow BOOLEAN NOT NULL DEFAULT FALSE`;
+    await migrateRoutines(tx);
   });
 }

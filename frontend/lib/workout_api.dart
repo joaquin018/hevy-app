@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 
 import 'workout_history_models.dart';
 import 'auth_controller.dart';
+import 'routine_models.dart';
+export 'routine_models.dart';
+part 'routine_api.dart';
 
 class WorkoutSetPayload {
   const WorkoutSetPayload({
@@ -69,18 +72,6 @@ class ExerciseCatalogItem {
 
   final String name;
   final String muscleGroup;
-}
-
-class RoutinePayload {
-  const RoutinePayload({required this.name, required this.exercises});
-  final String name;
-  final List<String> exercises;
-}
-
-class RoutineFolderPayload {
-  const RoutineFolderPayload({required this.name, required this.routines});
-  final String name;
-  final List<RoutinePayload> routines;
 }
 
 class WorkoutApi {
@@ -286,48 +277,5 @@ class WorkoutApi {
     }
   }
 
-  Future<List<RoutineFolderPayload>> getRoutineFolders() async {
-    final response = await _client.get(Uri.parse('$_baseUrl/routine-folders'));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}: ${response.body}');
-    }
-    final folders = jsonDecode(response.body) as List<dynamic>;
-    return [
-      for (final value in folders)
-        RoutineFolderPayload(
-          name: (value as Map<String, dynamic>)['name'] as String,
-          routines: [
-            for (final routine in value['routines'] as List<dynamic>)
-              RoutinePayload(
-                name: (routine as Map<String, dynamic>)['name'] as String,
-                exercises: List<String>.from(
-                  routine['exercises'] as List<dynamic>,
-                ),
-              ),
-          ],
-        ),
-    ];
-  }
-
-  Future<void> saveRoutineFolders(List<RoutineFolderPayload> folders) async {
-    final response = await _client.put(
-      Uri.parse('$_baseUrl/routine-folders'),
-      headers: {'content-type': 'application/json'},
-      body: jsonEncode({
-        'folders': [
-          for (final folder in folders)
-            {
-              'name': folder.name,
-              'routines': [
-                for (final routine in folder.routines)
-                  {'name': routine.name, 'exercises': routine.exercises},
-              ],
-            },
-        ],
-      }),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}: ${response.body}');
-    }
-  }
+  void close() => _client.close();
 }
