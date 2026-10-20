@@ -2272,14 +2272,25 @@ class _AddExercisePageState extends State<AddExercisePage> {
   final List<(String, String)> _exercises = List.of(_defaultExercises);
   String _query = '';
 
+  static String _normalizeSearchText(String text) => text
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll('ñ', 'n')
+      .replaceAll(RegExp(r'[\u0300-\u036f]'), '');
+
   List<(String, String)> get _filteredExercises {
-    final query = _query.trim().toLowerCase();
+    final query = _normalizeSearchText(_query.trim());
     if (query.isEmpty) return _exercises;
     return _exercises
         .where(
           (exercise) =>
-              exercise.$1.toLowerCase().contains(query) ||
-              exercise.$2.toLowerCase().contains(query),
+              _normalizeSearchText(exercise.$1).contains(query) ||
+              _normalizeSearchText(exercise.$2).contains(query),
         )
         .toList();
   }

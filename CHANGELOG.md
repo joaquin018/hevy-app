@@ -5,6 +5,18 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v17] — 2026-10-20
+
+Búsqueda de ejercicios con o sin tildes.
+
+- Ignorar tildes, diéresis y mayúsculas al buscar por nombre de ejercicio o grupo muscular.
+- Admitir acentos Unicode combinados y conservar los nombres originales al mostrar y seleccionar resultados.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 11 pruebas del frontend, análisis estático y compilación web correctos.
+
+[Cambios desde v16](https://github.com/joaquin018/hevy-app/compare/v16...v17).
+
 ## [v16] — 2026-10-14
 
 Compartir rutinas entre cuentas registradas dentro de i7l.
