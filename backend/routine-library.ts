@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
+import { randomUUID } from 'node:crypto';
 import type { Database } from './auth.ts';
 import { exercises, routineExercises, routineFolders, routines, routineShares, users } from './schema.ts';
+import type { RoutineSnapshot, FolderSnapshot } from './schema.ts';
 
 export class RoutineError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -148,52 +150,81 @@ export class RoutineLibrary {
       .orderBy(sql`lower(${users.email}) COLLATE "C"`).limit(10);
   }
 
-  async send(userId: string, input: { id: string; routineId: string; recipientId: string; version: number }) {
+  async send(userId: string, input: { id: string; recipientId: string; version: number } & ({ routineId: string } | { folderId: string })) {
     this.rate(userId, 'send', 20, 3600000);
     if (input.recipientId === userId) fail(400, 'SELF_SHARE', 'Elige otra cuenta para compartir.');
+    const isFolder = 'folderId' in input;
+    const sourceId = isFolder ? input.folderId : input.routineId;
+    const sourceColumn = isFolder ? routineShares.sourceFolderId : routineShares.sourceRoutineId;
     return this.db.transaction(async (tx) => {
       const version = await lockLibrary(tx, userId);
       const [retry] = await tx.select().from(routineShares).where(eq(routineShares.id, input.id));
       if (retry) {
-        if (retry.senderId !== userId || retry.recipientId !== input.recipientId || retry.sourceRoutineId !== input.routineId) fail(409, 'INVALID_REQUEST', 'Identificador de envío ya utilizado.');
+        if (retry.senderId !== userId || retry.recipientId !== input.recipientId ||
+            (isFolder ? retry.sourceFolderId : retry.sourceRoutineId) !== sourceId ||
+            (retry.snapshot.version === 2) !== isFolder) fail(409, 'INVALID_REQUEST', 'Identificador de envío ya utilizado.');
         return { id: retry.id, status: retry.status };
       }
       if (version !== input.version) fail(409, 'LIBRARY_CHANGED', 'Actualiza tus rutinas antes de compartir.');
-      const [routine] = await tx.select({ id: routines.id, name: routines.name }).from(routines)
-        .innerJoin(routineFolders, eq(routines.folderId, routineFolders.id))
-        .where(and(eq(routines.id, input.routineId), eq(routineFolders.userId, userId)));
-      if (!routine) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
+      let name: string;
+      let selected: { id: string; name: string }[];
+      if (isFolder) {
+        const [folder] = await tx.select({ name: routineFolders.name }).from(routineFolders)
+          .where(and(eq(routineFolders.id, sourceId), eq(routineFolders.userId, userId)));
+        if (!folder) fail(404, 'NOT_FOUND', 'Carpeta no encontrada.');
+        name = folder.name;
+        selected = await tx.select({ id: routines.id, name: routines.name }).from(routines)
+          .where(eq(routines.folderId, sourceId)).orderBy(asc(routines.position), asc(routines.id)).limit(101);
+        if (!selected.length) fail(400, 'EMPTY_FOLDER', 'Añade rutinas antes de compartir esta carpeta.');
+        if (selected.length > 100) fail(400, 'FOLDER_TOO_LARGE', 'Puedes compartir hasta 100 rutinas por carpeta.');
+      } else {
+        selected = await tx.select({ id: routines.id, name: routines.name }).from(routines)
+          .innerJoin(routineFolders, eq(routines.folderId, routineFolders.id))
+          .where(and(eq(routines.id, sourceId), eq(routineFolders.userId, userId)));
+        if (!selected.length) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
+        name = selected[0].name;
+      }
       const [recipient] = await tx.select({ id: users.id }).from(users).where(sql`
         ${users.id} = ${input.recipientId} AND ${users.googleSubject} IS NOT NULL AND ${users.email} IS NOT NULL`);
       if (!recipient) fail(404, 'RECIPIENT_NOT_FOUND', 'Esta persona debe registrarse primero.');
-      const entries = await tx.select({ name: routineExercises.name }).from(routineExercises)
-        .where(eq(routineExercises.routineId, routine.id)).orderBy(asc(routineExercises.position)).limit(101);
-      if (!entries.length) fail(400, 'EMPTY_ROUTINE', 'Añade ejercicios antes de compartir esta rutina.');
-      if (entries.length > 100) fail(400, 'ROUTINE_TOO_LARGE', 'Puedes compartir hasta 100 ejercicios por rutina.');
+      const entries = await tx.select({ routineId: routineExercises.routineId, name: routineExercises.name }).from(routineExercises)
+        .where(inArray(routineExercises.routineId, selected.map(r => r.id)))
+        .orderBy(asc(routineExercises.routineId), asc(routineExercises.position)).limit(isFolder ? 501 : 101);
+      if (!isFolder && !entries.length) fail(400, 'EMPTY_ROUTINE', 'Añade ejercicios antes de compartir esta rutina.');
+      if (isFolder && entries.length > 500) fail(400, 'FOLDER_TOO_LARGE', 'Puedes compartir hasta 500 ejercicios por carpeta.');
       const normalizedNames = [...new Set(entries.map(e => normalize(e.name)))];
-      const settings = await tx.select().from(exercises).where(and(eq(exercises.userId, userId), inArray(exercises.normalizedName, normalizedNames)));
+      const settings = normalizedNames.length ? await tx.select().from(exercises).where(and(eq(exercises.userId, userId), inArray(exercises.normalizedName, normalizedNames))) : [];
       const byName = new Map(settings.map(e => [e.normalizedName, e]));
-      const snapshot = { version: 1 as const, name: routine.name, exercises: entries.map(e => {
+      const byRoutine = new Map<string, RoutineSnapshot['exercises']>();
+      for (const e of entries) {
         const config = byName.get(normalize(e.name));
-        return { name: e.name, muscleGroup: config?.muscleGroup ?? null, restSeconds: config?.restSeconds ?? 180 };
-      }) };
-      if (Buffer.byteLength(JSON.stringify(snapshot)) > 60000) fail(400, 'ROUTINE_TOO_LARGE', 'Esta rutina es demasiado grande para compartir.');
+        const list = byRoutine.get(e.routineId) ?? [];
+        list.push({ name: e.name, muscleGroup: config?.muscleGroup ?? null, restSeconds: config?.restSeconds ?? 180 });
+        if (list.length > 100) fail(400, 'ROUTINE_TOO_LARGE', 'Puedes compartir hasta 100 ejercicios por rutina.');
+        byRoutine.set(e.routineId, list);
+      }
+      const snapshot: RoutineSnapshot | FolderSnapshot = isFolder
+        ? { version: 2, name, routines: selected.map(r => ({ name: r.name, exercises: byRoutine.get(r.id) ?? [] })) }
+        : { version: 1, name, exercises: byRoutine.get(selected[0].id) ?? [] };
+      if (Buffer.byteLength(JSON.stringify(snapshot)) > 60000) fail(400, isFolder ? 'FOLDER_TOO_LARGE' : 'ROUTINE_TOO_LARGE', 'El contenido es demasiado grande para compartir.');
       const [share] = await tx.insert(routineShares).values({ id: input.id, senderId: userId, recipientId: input.recipientId,
-        sourceRoutineId: routine.id, snapshot, createdAt: new Date() }).onConflictDoNothing().returning({ id: routineShares.id, status: routineShares.status });
+        sourceRoutineId: isFolder ? null : sourceId, sourceFolderId: isFolder ? sourceId : null,
+        snapshot, createdAt: new Date() }).onConflictDoNothing().returning({ id: routineShares.id, status: routineShares.status });
       if (share) return share;
       const [pending] = await tx.select({ id: routineShares.id, status: routineShares.status }).from(routineShares)
-        .where(and(eq(routineShares.senderId, userId), eq(routineShares.recipientId, input.recipientId), eq(routineShares.sourceRoutineId, routine.id), eq(routineShares.status, 'pending')));
+        .where(and(eq(routineShares.senderId, userId), eq(routineShares.recipientId, input.recipientId), eq(sourceColumn, sourceId), eq(routineShares.status, 'pending')));
       if (!pending) fail(409, 'INVALID_REQUEST', 'No se pudo crear el envío. Inténtalo de nuevo.');
       return pending;
     });
   }
 
-  async hasPending(userId: string) {
+  async hasPending(userId: string, includeFolders = false) {
     const [share] = await this.db.select({ id: routineShares.id }).from(routineShares)
-      .where(sql`${routineShares.recipientId} = ${userId} AND ${routineShares.status} = 'pending'`).limit(1);
+      .where(sql`${routineShares.recipientId} = ${userId} AND ${routineShares.status} = 'pending'
+        AND (${includeFolders} OR ${routineShares.snapshot}->>'version' = '1')`).limit(1);
     return { pending: !!share };
   }
-  async list(userId: string, direction: 'received' | 'sent', cursor?: string) {
+  async list(userId: string, direction: 'received' | 'sent', cursor?: string, includeFolders = false) {
     let before = sql`true`;
     if (cursor) {
       try {
@@ -208,11 +239,16 @@ export class RoutineLibrary {
       : eq(routineShares.senderId, userId);
     const rows = await this.db.select({
       id: routineShares.id, name: sql<string>`${routineShares.snapshot}->>'name'`,
-      exerciseCount: sql<number>`jsonb_array_length(${routineShares.snapshot}->'exercises')`,
+      kind: sql<string>`CASE WHEN ${routineShares.snapshot}->>'version' = '2' THEN 'folder' ELSE 'routine' END`,
+      routineCount: sql<number>`CASE WHEN ${routineShares.snapshot}->>'version' = '2' THEN jsonb_array_length(${routineShares.snapshot}->'routines') ELSE 1 END`,
+      exerciseCount: sql<number>`CASE WHEN ${routineShares.snapshot}->>'version' = '2' THEN
+        (SELECT coalesce(sum(jsonb_array_length(r->'exercises')), 0)::integer FROM jsonb_array_elements(${routineShares.snapshot}->'routines') r)
+        ELSE jsonb_array_length(${routineShares.snapshot}->'exercises') END`,
       senderEmail: sender.email, recipientEmail: recipient.email,
       status: routineShares.status, createdAt: routineShares.createdAt,
     }).from(routineShares).innerJoin(sender, eq(sender.id, routineShares.senderId))
-      .innerJoin(recipient, eq(recipient.id, routineShares.recipientId)).where(and(own, before))
+      .innerJoin(recipient, eq(recipient.id, routineShares.recipientId)).where(and(own, before,
+        sql`(${includeFolders} OR ${routineShares.snapshot}->>'version' = '1')`))
       .orderBy(desc(routineShares.createdAt), desc(routineShares.id)).limit(21);
     const items = rows.slice(0, 20), last = items.at(-1);
     return { items, nextCursor: rows.length > 20 && last ? Buffer.from(JSON.stringify({ at: last.createdAt.toISOString(), id: last.id })).toString('base64url') : null };
@@ -242,10 +278,17 @@ export class RoutineLibrary {
       const [share] = await tx.select().from(routineShares)
         .where(and(eq(routineShares.id, id), eq(routineShares.recipientId, userId))).for('update');
       if (!share) fail(404, 'NOT_FOUND', 'Envío no encontrado.');
-      if (share.status === 'accepted') return { routineId: share.importedRoutineId, version, status: 'accepted' };
+      const isFolder = share.snapshot.version === 2;
+      if (share.status === 'accepted') return isFolder
+        ? { folderId: share.importedFolderId, version, status: 'accepted' }
+        : { routineId: share.importedRoutineId, version, status: 'accepted' };
       if (share.status !== 'pending') fail(409, 'SHARE_RESOLVED', 'Este envío ya fue resuelto.');
       let folder;
-      if (folderId) {
+      if (isFolder) {
+        if (folderId) fail(400, 'INVALID_DESTINATION', 'La carpeta compartida se guarda como una carpeta nueva.');
+        const [position] = await tx.select({ next: sql<number>`coalesce(max(${routineFolders.position}), -1) + 1` }).from(routineFolders).where(eq(routineFolders.userId, userId));
+        [folder] = await tx.insert(routineFolders).values({ userId, name: share.snapshot.name, position: position.next }).returning();
+      } else if (folderId) {
         [folder] = await tx.select().from(routineFolders).where(and(eq(routineFolders.id, folderId), eq(routineFolders.userId, userId)));
         if (!folder) fail(404, 'NOT_FOUND', 'Carpeta no encontrada.');
       } else {
@@ -256,15 +299,22 @@ export class RoutineLibrary {
         }
       }
       const [position] = await tx.select({ next: sql<number>`coalesce(max(${routines.position}), -1) + 1` }).from(routines).where(eq(routines.folderId, folder.id));
-      const [copy] = await tx.insert(routines).values({ folderId: folder.id, name: share.snapshot.name, position: position.next }).returning();
-      if (share.snapshot.exercises.length) {
-        await tx.insert(routineExercises).values(share.snapshot.exercises.map((e, position) => ({ routineId: copy.id, name: e.name, position })));
-        const distinct = [...new Map(share.snapshot.exercises.map(e => [normalize(e.name), e])).values()];
+      const incoming = share.snapshot.version === 2 ? share.snapshot.routines : [share.snapshot];
+      const copies = incoming.map((routine, index) => ({ id: randomUUID(), folderId: folder.id, name: routine.name, position: position.next + index }));
+      await tx.insert(routines).values(copies);
+      const rows = incoming.flatMap((routine, index) => routine.exercises.map((e, position) => ({ routineId: copies[index].id, name: e.name, position })));
+      if (rows.length) await tx.insert(routineExercises).values(rows);
+      const allExercises = incoming.flatMap(routine => routine.exercises);
+      if (allExercises.length) {
+        const distinct = [...new Map(allExercises.map(e => [normalize(e.name), e])).values()];
         await tx.insert(exercises).values(distinct.map(e => ({ userId, name: e.name, normalizedName: normalize(e.name), muscleGroup: e.muscleGroup, restSeconds: e.restSeconds })))
           .onConflictDoNothing({ target: [exercises.userId, exercises.normalizedName] });
       }
-      await tx.update(routineShares).set({ status: 'accepted', importedRoutineId: copy.id, resolvedAt: new Date() }).where(eq(routineShares.id, id));
-      return { routineId: copy.id, status: 'accepted', version: await bumpVersion(tx, userId) };
+      await tx.update(routineShares).set({ status: 'accepted', importedRoutineId: isFolder ? null : copies[0].id,
+        importedFolderId: isFolder ? folder.id : null, resolvedAt: new Date() }).where(eq(routineShares.id, id));
+      const nextVersion = await bumpVersion(tx, userId);
+      return isFolder ? { folderId: folder.id, status: 'accepted', version: nextVersion }
+        : { routineId: copies[0].id, status: 'accepted', version: nextVersion };
     });
   }
 }

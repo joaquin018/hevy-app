@@ -83,9 +83,32 @@ extension RoutineOperations on WorkoutApi {
     );
   }
 
+  Future<void> shareFolder({
+    required String id,
+    required String folderId,
+    required String recipientId,
+    required int version,
+  }) async {
+    _routineResponse(
+      await _client.post(
+        Uri.parse('$_baseUrl/folder-shares'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'id': id,
+          'folderId': folderId,
+          'recipientId': recipientId,
+          'version': version,
+        }),
+      ),
+    );
+  }
+
   Future<bool> hasPendingRoutines() async =>
       _routineResponse(
-            await _client.get(Uri.parse('$_baseUrl/routine-shares/pending')),
+            await _client.get(
+              Uri.parse('$_baseUrl/routine-shares/pending')
+                  .replace(queryParameters: {'includeFolders': 'true'}),
+            ),
           )['pending']
           as bool;
   Future<RoutineSharePage> getRoutineShares({
@@ -97,6 +120,7 @@ extension RoutineOperations on WorkoutApi {
         Uri.parse('$_baseUrl/routine-shares').replace(
           queryParameters: {
             'direction': sent ? 'sent' : 'received',
+            'includeFolders': 'true',
             'cursor': ?cursor,
           },
         ),
@@ -116,7 +140,20 @@ extension RoutineOperations on WorkoutApi {
     )['snapshot'];
     return RoutinePreview(
       name: value['name'] as String,
-      exercises: (value['exercises'] as List)
+      isFolder: value['version'] == 2,
+      routines: value['version'] == 2
+          ? (value['routines'] as List)
+                .map(
+                  (routine) => RoutinePreview(
+                    name: routine['name'] as String,
+                    exercises: (routine['exercises'] as List)
+                        .map((e) => e['name'] as String)
+                        .toList(),
+                  ),
+                )
+                .toList()
+          : const [],
+      exercises: ((value['exercises'] ?? []) as List)
           .map((v) => v['name'] as String)
           .toList(),
     );

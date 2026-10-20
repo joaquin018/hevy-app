@@ -143,13 +143,21 @@ export type RoutineSnapshot = {
   exercises: { name: string; muscleGroup: string | null; restSeconds: number }[];
 };
 
+export type FolderSnapshot = {
+  version: 2;
+  name: string;
+  routines: Omit<RoutineSnapshot, 'version'>[];
+};
+
 export const routineShares = pgTable('routine_shares', {
   id: uuid('id').primaryKey(),
   senderId: uuid('sender_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   recipientId: uuid('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   sourceRoutineId: uuid('source_routine_id').references(() => routines.id, { onDelete: 'set null' }),
   importedRoutineId: uuid('imported_routine_id').references(() => routines.id, { onDelete: 'set null' }),
-  snapshot: jsonb('snapshot').$type<RoutineSnapshot>().notNull(),
+  sourceFolderId: uuid('source_folder_id').references(() => routineFolders.id, { onDelete: 'set null' }),
+  importedFolderId: uuid('imported_folder_id').references(() => routineFolders.id, { onDelete: 'set null' }),
+  snapshot: jsonb('snapshot').$type<RoutineSnapshot | FolderSnapshot>().notNull(),
   status: text('status').notNull().default('pending'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
@@ -159,6 +167,9 @@ export const routineShares = pgTable('routine_shares', {
   uniqueIndex('routine_shares_pending_unique_idx').on(table.senderId, table.recipientId, table.sourceRoutineId).where(sql`${table.status} = 'pending'`),
   index('routine_shares_source_idx').on(table.sourceRoutineId).where(sql`${table.sourceRoutineId} IS NOT NULL`),
   index('routine_shares_imported_idx').on(table.importedRoutineId).where(sql`${table.importedRoutineId} IS NOT NULL`),
+  uniqueIndex('routine_shares_pending_folder_unique_idx').on(table.senderId, table.recipientId, table.sourceFolderId).where(sql`${table.status} = 'pending'`),
+  index('routine_shares_source_folder_idx').on(table.sourceFolderId).where(sql`${table.sourceFolderId} IS NOT NULL`),
+  index('routine_shares_imported_folder_idx').on(table.importedFolderId).where(sql`${table.importedFolderId} IS NOT NULL`),
 ]);
 
 export const activeWorkoutDrafts = pgTable('active_workout_drafts', {

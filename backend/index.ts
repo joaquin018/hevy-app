@@ -272,9 +272,14 @@ app.get('/routine-recipients', ({ userId, query }) => library.recipients(userId,
 app.post('/routine-shares', ({ userId, body }) => library.send(userId, body), {
   body: t.Object({ id: uuid(), routineId: uuid(), recipientId: uuid(), version: t.Integer({ minimum: 0 }) }),
 });
-app.get('/routine-shares/pending', ({ userId }) => library.hasPending(userId));
-app.get('/routine-shares', ({ userId, query }) => library.list(userId, query.direction ?? 'received', query.cursor), {
-  query: t.Object({ direction: t.Optional(t.Union([t.Literal('received'), t.Literal('sent')])), cursor: t.Optional(t.String({ maxLength: 300 })) }),
+app.post('/folder-shares', ({ userId, body }) => library.send(userId, body), {
+  body: t.Object({ id: uuid(), folderId: uuid(), recipientId: uuid(), version: t.Integer({ minimum: 0 }) }),
+});
+app.get('/routine-shares/pending', ({ userId, query }) => library.hasPending(userId, query.includeFolders === 'true'), {
+  query: t.Object({ includeFolders: t.Optional(t.Literal('true')) }),
+});
+app.get('/routine-shares', ({ userId, query }) => library.list(userId, query.direction ?? 'received', query.cursor, query.includeFolders === 'true'), {
+  query: t.Object({ direction: t.Optional(t.Union([t.Literal('received'), t.Literal('sent')])), cursor: t.Optional(t.String({ maxLength: 300 })), includeFolders: t.Optional(t.Literal('true')) }),
 });
 app.get('/routine-shares/:id', ({ userId, params }) => library.detail(userId, params.id), { params: t.Object({ id: uuid() }) });
 app.post('/routine-shares/:id/accept', ({ userId, params, body }) => library.accept(userId, params.id, body.folderId), {

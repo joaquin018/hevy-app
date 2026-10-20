@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v20**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v21**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `21`
+Para publicar otra versión después de terminar los cambios (sustituye `22`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 21
-# Añade una sección ## [v21] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v21
+bun scripts/version.mjs prepare 22
+# Añade una sección ## [v22] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v22
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v21'
-git tag -a v21 -m 'v21: descripción de los cambios'
-git push --atomic origin master v21
-bun scripts/version.mjs notes v21 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v21 --verify-tag --title 'v21 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v22'
+git tag -a v22 -m 'v22: descripción de los cambios'
+git push --atomic origin master v22
+bun scripts/version.mjs notes v22 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v22 --verify-tag --title 'v22 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -174,7 +174,7 @@ muestra una cuenta distinta de la cookie actual. Consulta
 [la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
 `app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
 
-## Compartir rutinas dentro de i7l
+## Compartir rutinas y carpetas dentro de i7l
 
 En las opciones de una rutina, **Compartir rutina** busca el correo de una
 cuenta registrada. La búsqueda comienza con tres caracteres, espera 350 ms
@@ -182,11 +182,27 @@ al escribir y devuelve hasta diez coincidencias. Solo muestra identificador
 y correo; requiere sesión y tiene un límite de 30 consultas por minuto por
 cuenta. El prefijo se trata literalmente, incluidos `%` y `_`.
 
-El botón de bandeja abre **Rutinas compartidas**, con recibidas y enviadas.
+El botón de bandeja abre **Compartidos**, con recibidas y enviadas.
 El destinatario ve una vista previa y acepta en una carpeta propia o en
 **Recibidas**, creada automáticamente. Puede rechazar; el remitente puede
 cancelar mientras el envío esté pendiente. No se envían correos ni se necesita
 un servicio adicional. Para recibir, la persona debe registrarse primero.
+
+En las opciones de una carpeta, **Compartir carpeta** envía todas sus rutinas
+en un solo envío. La vista previa muestra las rutinas y sus ejercicios en orden.
+Al aceptar, se crea una carpeta nueva con el nombre original y copias independientes
+de todas las rutinas, incluidas las que todavía no tienen ejercicios. Editar o
+eliminar la carpeta original después del envío no cambia la copia recibida.
+Se conservan los grupos musculares y descansos; la configuración que el
+destinatario ya tenga para un ejercicio tiene prioridad. No se comparten sesiones
+ni récords personales.
+
+`POST /folder-shares` usa la misma selección de destinatario, control de versión,
+reintentos y límite de envíos que una rutina individual. Admite hasta 100 rutinas,
+100 ejercicios por rutina y 500 por carpeta, dentro del límite de tamaño del envío.
+La migración agrega referencias de carpeta e índices sin reemplazar los envíos
+existentes. Las bandejas y el aviso incluyen carpetas con `includeFolders=true`;
+las pestañas anteriores siguen recibiendo únicamente rutinas individuales.
 
 Cada envío conserva una instantánea de nombre, ejercicios ordenados, grupo
 muscular y descanso. La aceptación crea una copia independiente sin historial,

@@ -504,14 +504,27 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (_) =>
-          const _ItemManagementSheet(itemType: 'carpeta', canReorder: true),
+      builder: (_) => _ItemManagementSheet(
+        itemType: 'carpeta',
+        canReorder: true,
+        canShare: widget.enableCloudPersistence && _ready && !_saving.value,
+      ),
     );
     if (!mounted || action == null) return;
     if (action == _ItemManagementAction.reorder) {
       await _reorderFolders();
     } else if (action == _ItemManagementAction.rename) {
       await _renameFolder(index);
+    } else if (action == _ItemManagementAction.share) {
+      final folder = _folders[index];
+      final reload = await showFolderShareDialog(
+        context,
+        api: _workoutApi,
+        folderId: folder.id,
+        folderName: folder.name,
+        version: _library.version,
+      );
+      if (reload && mounted) await _loadRoutineFolders();
     } else {
       await _deleteFolder(index);
     }
@@ -1200,7 +1213,7 @@ class _RoutinesHeader extends StatelessWidget {
           if (onShared != null)
             IconButton(
               key: const ValueKey('abrir-rutinas-compartidas'),
-              tooltip: 'Rutinas compartidas',
+              tooltip: 'Rutinas y carpetas compartidas',
               onPressed: onShared,
               icon: Badge(
                 isLabelVisible: pending,
@@ -1295,7 +1308,7 @@ class _ItemManagementSheet extends StatelessWidget {
               if (canShare)
                 _ExerciseOption(
                   icon: Icons.send_outlined,
-                  label: 'Compartir rutina',
+                  label: 'Compartir $itemType',
                   onTap: () =>
                       Navigator.of(context).pop(_ItemManagementAction.share),
                 ),

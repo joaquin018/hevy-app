@@ -20,6 +20,12 @@ export async function migrateRoutines(tx: TransactionSql) {
     resolved_at TIMESTAMPTZ,
     CHECK (sender_id <> recipient_id)
   )`;
+  await tx`ALTER TABLE routine_shares ADD COLUMN IF NOT EXISTS source_folder_id UUID REFERENCES routine_folders(id) ON DELETE SET NULL`;
+  await tx`ALTER TABLE routine_shares ADD COLUMN IF NOT EXISTS imported_folder_id UUID REFERENCES routine_folders(id) ON DELETE SET NULL`;
+  await tx`CREATE UNIQUE INDEX IF NOT EXISTS routine_shares_pending_folder_unique_idx
+    ON routine_shares(sender_id, recipient_id, source_folder_id) WHERE status = 'pending'`;
+  await tx`CREATE INDEX IF NOT EXISTS routine_shares_source_folder_idx ON routine_shares(source_folder_id) WHERE source_folder_id IS NOT NULL`;
+  await tx`CREATE INDEX IF NOT EXISTS routine_shares_imported_folder_idx ON routine_shares(imported_folder_id) WHERE imported_folder_id IS NOT NULL`;
   // One composite index serves pending inbox, badge and recipient FK cleanup.
   await tx`CREATE INDEX IF NOT EXISTS routine_shares_recipient_idx
     ON routine_shares(recipient_id, status, created_at DESC, id DESC)`;

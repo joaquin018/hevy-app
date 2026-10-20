@@ -55,6 +55,7 @@ test('all new endpoints require authentication', async () => {
     ['/routine-library', 'GET'], ['/routine-library', 'PATCH', emptyPatch(0)],
     ['/routine-recipients?q=ali', 'GET'], ['/routine-shares', 'GET'], ['/routine-shares/pending', 'GET'],
     ['/routine-shares', 'POST', { id: randomUUID(), routineId: randomUUID(), recipientId: bob.id, version: 0 }],
+    ['/folder-shares', 'POST', { id: randomUUID(), folderId: randomUUID(), recipientId: bob.id, version: 0 }],
     [`/routine-shares/${randomUUID()}`, 'GET'], [`/routine-shares/${randomUUID()}/accept`, 'POST', {}],
     [`/routine-shares/${randomUUID()}/reject`, 'POST'], [`/routine-shares/${randomUUID()}/revoke`, 'POST'],
   ] as const) expect((await request(path, anonymous, method, body)).status).toBe(401);
@@ -199,6 +200,168 @@ test('keyset pagination is private and has no omissions when timestamps tie', as
   expect((await (await request('/routine-shares', carol)).json()).items).toEqual([]);
   expect((await request('/routine-shares?cursor=invalid', bob)).status).toBe(400);
 });
+async function createPlan(user = alice) {
+  const folderId = randomUUID();
+  const version = (await getLibrary(user)).version;
+  const entries = [
+    { id: randomUUID(), name: 'Piernas', position: 2, exercises: [] },
+    { id: randomUUID(), name: 'Empuje', position: 0, exercises: ['Press', 'Elevaciones'] },
+    { id: randomUUID(), name: 'Tirón', position: 1, exercises: ['Remo', 'Press'] },
+  ];
+  expect((await request('/routine-library', user, 'PATCH', { ...emptyPatch(version),
+    folders: [{ id: folderId, name: 'Semana completa', position: 0 }],
+    routines: entries.map(r => ({ ...r, folderId })),
+  })).status).toBe(200);
+  return { folderId, version: version + 1, entries };
+}
+async function sendFolder(folderId: string, version: number, id: string = randomUUID()) {
+  const response = await request('/folder-shares', alice, 'POST', { id, folderId, recipientId: bob.id, version });
+  expect(response.status).toBe(200);
+  return await response.json() as { id: string; status: string };
+}
+
+test('folder sharing validates ownership, recipient, revision and empty folders', async () => {
+  const plan = await createPlan();
+  const input = { id: randomUUID(), folderId: plan.folderId, recipientId: bob.id, version: plan.version };
+  expect((await request('/folder-shares', carol, 'POST', { ...input, version: 0 })).status).toBe(404);
+  expect((await request('/folder-shares', alice, 'POST', { ...input, recipientId: alice.id })).status).toBe(400);
+  expect((await request('/folder-shares', alice, 'POST', { ...input, recipientId: randomUUID() })).status).toBe(404);
+  expect((await request('/folder-shares', alice, 'POST', { ...input, version: 0 })).status).toBe(409);
+  expect((await request('/folder-shares', alice, 'POST', { ...input, folderId: randomUUID() })).status).toBe(404);
+  const empty = randomUUID();
+  await request('/routine-library', alice, 'PATCH', { ...emptyPatch(plan.version), folders: [{ id: empty, name: 'Vacía', position: 1 }] });
+  const rejected = await request('/folder-shares', alice, 'POST', { ...input, folderId: empty, version: plan.version + 1 });
+  expect(rejected.status).toBe(400);
+  expect((await rejected.json()).code).toBe('EMPTY_FOLDER');
+  expect(await db.select().from(routineShares)).toHaveLength(0);
+});
+
+test('upgrading the routine-only schema preserves pending individual shares', async () => {
+  const r = await createRoutine();
+  const share = await send(r.routineId, r.version);
+  // The test connection uses its own disposable schema, never application data.
+  await client`ALTER TABLE routine_shares DROP COLUMN source_folder_id CASCADE, DROP COLUMN imported_folder_id CASCADE`;
+  await migrateAuth(client);
+  await migrateAuth(client);
+  const pending = await (await request('/routine-shares', bob)).json();
+  expect(pending.items[0]).toMatchObject({ id: share.id, name: 'Empuje', kind: 'routine' });
+  expect((await request(`/routine-shares/${share.id}/accept`, bob, 'POST', {})).status).toBe(200);
+  expect((await getLibrary(bob)).folders[0].routines[0].exercises).toEqual(['Press', 'Elevaciones']);
+});
+
+test('folder sends are idempotent and older clients keep a routine-only inbox', async () => {
+  const plan = await createPlan();
+  const share = await sendFolder(plan.folderId, plan.version);
+  expect((await sendFolder(plan.folderId, plan.version)).id).toBe(share.id);
+  expect((await sendFolder(plan.folderId, 0, share.id)).id).toBe(share.id);
+  expect((await (await request('/routine-shares', bob)).json()).items).toEqual([]);
+  expect(await (await request('/routine-shares/pending', bob)).json()).toEqual({ pending: false });
+  expect(await (await request('/routine-shares/pending?includeFolders=true', bob)).json()).toEqual({ pending: true });
+  const page = await (await request('/routine-shares?includeFolders=true', bob)).json();
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]).toMatchObject({ id: share.id, kind: 'folder', routineCount: 3, exerciseCount: 4, name: 'Semana completa' });
+  expect((await request(`/routine-shares/${share.id}`, carol)).status).toBe(404);
+  expect((await request(`/routine-shares/${share.id}/accept`, alice, 'POST', {})).status).toBe(404);
+  expect((await request('/routine-shares', alice, 'POST', { id: share.id, routineId: plan.entries[0].id, recipientId: bob.id, version: plan.version })).status).toBe(409);
+  await migrateAuth(client);
+  expect((await (await request('/routine-shares?includeFolders=true', bob)).json()).items).toHaveLength(1);
+});
+
+test('accepting a folder copies every routine in order, preserves settings and survives source deletion', async () => {
+  const plan = await createPlan();
+  await db.insert(exercises).values([
+    { userId: alice.id, name: 'Press', normalizedName: 'press', muscleGroup: 'Pecho', restSeconds: 120 },
+    { userId: alice.id, name: 'Remo', normalizedName: 'remo', muscleGroup: 'Dorsales', restSeconds: 90 },
+    { userId: bob.id, name: 'Press', normalizedName: 'press', muscleGroup: 'Personal', restSeconds: 240 },
+  ]);
+  const existing = await createRoutine(bob, 'Mi rutina');
+  const share = await sendFolder(plan.folderId, plan.version);
+  await request('/routine-library', alice, 'PATCH', { ...emptyPatch(plan.version), deletedFolders: [plan.folderId] });
+  const detail = await (await request(`/routine-shares/${share.id}`, bob)).json();
+  expect(detail.snapshot.version).toBe(2);
+  expect(detail.snapshot.routines.map((r: { name: string }) => r.name)).toEqual(['Empuje', 'Tirón', 'Piernas']);
+  expect(detail.snapshot.routines[0].exercises[0]).toMatchObject({ name: 'Press', muscleGroup: 'Pecho', restSeconds: 120 });
+  expect((await request(`/routine-shares/${share.id}/accept`, bob, 'POST', { folderId: existing.folderId })).status).toBe(400);
+  expect((await getLibrary(bob)).folders).toHaveLength(1);
+  const responses = await Promise.all([request(`/routine-shares/${share.id}/accept`, bob, 'POST', {}), request(`/routine-shares/${share.id}/accept`, bob, 'POST', {})]);
+  expect(responses.map(r => r.status)).toEqual([200, 200]);
+  const [first, retry] = await Promise.all(responses.map(r => r.json()));
+  expect(first.folderId).toBe(retry.folderId);
+  expect(first.folderId).not.toBe(plan.folderId);
+  const library = await getLibrary(bob);
+  expect(library.version).toBe(existing.version + 1);
+  expect(library.folders).toHaveLength(2);
+  const imported = library.folders[1];
+  expect(imported.name).toBe('Semana completa');
+  expect(imported.routines.map((r: { name: string }) => r.name)).toEqual(['Empuje', 'Tirón', 'Piernas']);
+  expect(imported.routines.map((r: { exercises: string[] }) => r.exercises)).toEqual([['Press', 'Elevaciones'], ['Remo', 'Press'], []]);
+  expect(imported.routines.every((r: { id: string }) => !plan.entries.some(e => e.id === r.id))).toBe(true);
+  expect(await (await request('/exercises/rest-timer?name=Press', bob)).json()).toEqual({ restSeconds: 240 });
+  expect(await (await request('/exercises/rest-timer?name=Remo', bob)).json()).toEqual({ restSeconds: 90 });
+  expect((await (await request('/workout-sessions', bob)).json()).total).toBe(0);
+  expect((await request('/exercises/previous?name=Press', bob)).status).toBe(404);
+  expect((await request('/routine-library', bob, 'PATCH', emptyPatch(existing.version))).status).toBe(409);
+  await request('/routine-library', bob, 'PATCH', { ...emptyPatch(library.version), deletedFolders: [imported.id] });
+  expect((await request(`/routine-shares/${share.id}/accept`, bob, 'POST', {})).status).toBe(200);
+  expect((await getLibrary(bob)).folders).toHaveLength(1);
+});
+
+test('imported folder copies are independent and folder rejection/cancellation create no data', async () => {
+  const plan = await createPlan();
+  const share = await sendFolder(plan.folderId, plan.version);
+  await request(`/routine-shares/${share.id}/accept`, bob, 'POST', {});
+  const received = await getLibrary(bob);
+  await request('/routine-library', bob, 'PATCH', { ...emptyPatch(received.version),
+    routines: [{ id: received.folders[0].routines[0].id, folderId: received.folders[0].id, name: 'Mi copia', position: 0, exercises: ['Otro'] }],
+  });
+  expect((await getLibrary()).folders[0].routines[0].name).toBe('Empuje');
+  const another = await sendFolder(plan.folderId, plan.version);
+  expect((await request(`/routine-shares/${another.id}/reject`, alice, 'POST')).status).toBe(404);
+  expect((await request(`/routine-shares/${another.id}/reject`, bob, 'POST')).status).toBe(200);
+  expect((await request(`/routine-shares/${another.id}/accept`, bob, 'POST', {})).status).toBe(409);
+  const cancelled = await sendFolder(plan.folderId, plan.version);
+  expect((await request(`/routine-shares/${cancelled.id}/revoke`, alice, 'POST')).status).toBe(200);
+  expect((await request(`/routine-shares/${cancelled.id}/accept`, bob, 'POST', {})).status).toBe(409);
+  expect((await getLibrary(bob)).folders).toHaveLength(1);
+});
+
+test('folder snapshot limits bound routine and exercise counts', async () => {
+  const folderId = randomUUID();
+  const entries = Array.from({ length: 101 }, (_, i) => ({ id: randomUUID(), folderId, name: `Día ${i}`, position: i, exercises: [] as string[] }));
+  await request('/routine-library', alice, 'PATCH', { ...emptyPatch(0), folders: [{ id: folderId, name: 'Plan', position: 0 }], routines: entries });
+  let response = await request('/folder-shares', alice, 'POST', { id: randomUUID(), folderId, recipientId: bob.id, version: 1 });
+  expect(response.status).toBe(400);
+  expect((await response.json()).code).toBe('FOLDER_TOO_LARGE');
+  await request('/routine-library', alice, 'PATCH', { ...emptyPatch(1), deletedRoutines: entries.slice(6).map(r => r.id),
+    routines: entries.slice(0, 6).map(r => ({ ...r, exercises: Array.from({ length: 100 }, (_, i) => `Ejercicio ${i}`) })) });
+  response = await request('/folder-shares', alice, 'POST', { id: randomUUID(), folderId, recipientId: bob.id, version: 2 });
+  expect(response.status).toBe(400);
+  expect((await response.json()).code).toBe('FOLDER_TOO_LARGE');
+});
+
+test('mixed folder/routine inbox pages stay private and do not omit tied timestamps', async () => {
+  const at = new Date();
+  await db.insert(routineShares).values(Array.from({ length: 43 }, (_, i) => ({
+    id: randomUUID(), senderId: alice.id, recipientId: bob.id, createdAt: at,
+    snapshot: i % 2 === 0 ? { version: 2 as const, name: `Folder ${i}`, routines: [{ name: 'Día', exercises: [] }] }
+      : { version: 1 as const, name: `Routine ${i}`, exercises: [] },
+  })));
+  const collected: string[] = []; let cursor: string | null = null;
+  do {
+    const page = await (await request('/routine-shares?includeFolders=true' + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''), bob)).json();
+    expect(page.items.length).toBeLessThanOrEqual(20);
+    collected.push(...page.items.map((i: { id: string }) => i.id)); cursor = page.nextCursor;
+    expect(collected.length).toBeLessThanOrEqual(43);
+  } while (cursor);
+  expect(collected).toHaveLength(43);
+  expect(new Set(collected).size).toBe(43);
+  for (const path of ['/routine-shares?includeFolders=true', '/routine-shares?includeFolders=true&direction=sent']) {
+    expect((await (await request(path, carol)).json()).items).toEqual([]);
+  }
+  expect((await (await request('/routine-shares?direction=sent&includeFolders=true', bob)).json()).items).toEqual([]);
+  expect((await (await request('/routine-shares?includeFolders=true&direction=sent', alice)).json()).items).toHaveLength(20);
+});
+
 test('representative directory and inbox queries use their indexes', async () => {
   await client`INSERT INTO users(display_name, email, google_subject)
     SELECT 'Load fixture', 'load' || lpad(n::text, 6, '0') || '@gmail.com', 'fixture-' || n FROM generate_series(1, 50000) n`;

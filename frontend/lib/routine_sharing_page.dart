@@ -30,6 +30,25 @@ Future<bool> showRoutineShareDialog(
       false;
 }
 
+Future<bool> showFolderShareDialog(
+  BuildContext context, {
+  required WorkoutApi api,
+  required String folderId,
+  required String folderName,
+  required int version,
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ShareRoutineDialog.folder(
+        api: api,
+        folderId: folderId,
+        folderName: folderName,
+        version: version,
+      ),
+    ) ??
+    false;
+
 class ShareRoutineDialog extends StatefulWidget {
   const ShareRoutineDialog({
     super.key,
@@ -37,9 +56,18 @@ class ShareRoutineDialog extends StatefulWidget {
     required this.routineId,
     required this.routineName,
     required this.version,
-  });
+  }) : folderId = null;
+  const ShareRoutineDialog.folder({
+    super.key,
+    required this.api,
+    required this.folderId,
+    required String folderName,
+    required this.version,
+  }) : routineId = null,
+       routineName = folderName;
   final WorkoutApi api;
-  final String routineId, routineName;
+  final String? routineId, folderId;
+  final String routineName;
   final int version;
   @override
   State<ShareRoutineDialog> createState() => _ShareRoutineDialogState();
@@ -54,6 +82,7 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
   String? _error;
   String _requestId = newRoutineId();
   bool _searching = false, _sending = false, _searched = false;
+  bool get _sharingFolder => widget.folderId != null;
   @override
   void dispose() {
     _debounce?.cancel();
@@ -100,15 +129,28 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
       _error = null;
     });
     try {
-      await widget.api.shareRoutine(
-        id: _requestId,
-        routineId: widget.routineId,
-        recipientId: _selected!.id,
-        version: widget.version,
-      );
+      if (_sharingFolder) {
+        await widget.api.shareFolder(
+          id: _requestId,
+          folderId: widget.folderId!,
+          recipientId: _selected!.id,
+          version: widget.version,
+        );
+      } else {
+        await widget.api.shareRoutine(
+          id: _requestId,
+          routineId: widget.routineId!,
+          recipientId: _selected!.id,
+          version: widget.version,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rutina enviada a ${_selected!.email}')),
+        SnackBar(
+          content: Text(
+            '${_sharingFolder ? 'Carpeta' : 'Rutina'} enviada a ${_selected!.email}',
+          ),
+        ),
       );
       Navigator.of(context).pop(false);
     } catch (error) {
@@ -129,7 +171,7 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
     child: AlertDialog(
       backgroundColor: const Color(0xFF171A22),
       surfaceTintColor: Colors.transparent,
-      title: const Text('Compartir rutina'),
+      title: Text(_sharingFolder ? 'Compartir carpeta' : 'Compartir rutina'),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -142,9 +184,11 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Busca el correo de una cuenta registrada. La persona recibirá una copia en su bandeja.',
-                style: TextStyle(color: _muted),
+              Text(
+                _sharingFolder
+                    ? 'Busca el correo de una cuenta registrada. La persona recibirá una copia de la carpeta con todas sus rutinas.'
+                    : 'Busca el correo de una cuenta registrada. La persona recibirá una copia en su bandeja.',
+                style: const TextStyle(color: _muted),
               ),
               const SizedBox(height: 18),
               TextField(
@@ -241,7 +285,13 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
           style: FilledButton.styleFrom(foregroundColor: Colors.white),
           key: const ValueKey('enviar-rutina'),
           onPressed: _selected == null || _sending ? null : _send,
-          child: Text(_sending ? 'Enviando…' : 'Enviar rutina'),
+          child: Text(
+            _sending
+                ? 'Enviando…'
+                : _sharingFolder
+                ? 'Enviar carpeta'
+                : 'Enviar rutina',
+          ),
         ),
       ],
     ),
@@ -317,7 +367,11 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
       if (!mounted) return;
       if (accepted == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rutina guardada en tu cuenta.')),
+          SnackBar(
+            content: Text(
+              '${share.isFolder ? 'Carpeta' : 'Rutina'} guardada en tu cuenta.',
+            ),
+          ),
         );
         await _load();
       }
@@ -335,7 +389,11 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(_sent ? 'Cancelar envío' : 'Rechazar rutina'),
+        title: Text(
+          _sent
+              ? 'Cancelar envío'
+              : 'Rechazar ${share.isFolder ? 'carpeta' : 'rutina'}',
+        ),
         content: Text(
           '¿Quieres ${_sent ? 'cancelar el envío de' : 'rechazar'} “${share.name}”?',
         ),
@@ -375,7 +433,7 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
   };
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Rutinas compartidas')),
+    appBar: AppBar(title: const Text('Compartidos')),
     body: Column(
       children: [
         Padding(
@@ -428,8 +486,8 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
                         const SizedBox(height: 16),
                         Text(
                           _sent
-                              ? 'Aún no has enviado rutinas'
-                              : 'No tienes rutinas pendientes',
+                              ? 'Aún no has enviado rutinas o carpetas'
+                              : 'No tienes compartidos pendientes',
                           style: const TextStyle(fontSize: 18),
                         ),
                         const SizedBox(height: 8),
@@ -462,7 +520,7 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '${share.exerciseCount} ejercicios · ${_status(share.status)}',
+                            '${share.isFolder ? 'Carpeta · ${share.routineCount} rutinas · ' : ''}${share.exerciseCount} ejercicios · ${_status(share.status)}',
                             style: const TextStyle(color: _muted),
                           ),
                           const SizedBox(height: 12),
@@ -480,7 +538,9 @@ class _RoutineSharingPageState extends State<RoutineSharingPage> {
                                 onPressed: _acting
                                     ? null
                                     : () => _preview(share),
-                                child: const Text('Ver rutina'),
+                                child: Text(
+                                  share.isFolder ? 'Ver carpeta' : 'Ver rutina',
+                                ),
                               ),
                               if (share.status == 'pending')
                                 TextButton(
@@ -554,7 +614,9 @@ class _RoutineSharePreviewPageState extends State<RoutineSharePreviewPage> {
   }
 
   Future<void> _loadFolders() async {
-    if (!widget.received || widget.share.status != 'pending') {
+    if (!widget.received ||
+        widget.share.status != 'pending' ||
+        widget.preview.isFolder) {
       setState(() => _loading = false);
       return;
     }
@@ -606,6 +668,37 @@ class _RoutineSharePreviewPageState extends State<RoutineSharePreviewPage> {
             style: const TextStyle(color: _muted),
           ),
           const SizedBox(height: 18),
+          if (widget.preview.isFolder)
+            for (final routine in widget.preview.routines) ...[
+              Text(
+                routine.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (routine.exercises.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Sin ejercicios',
+                    style: TextStyle(color: _muted),
+                  ),
+                ),
+              for (var i = 0; i < routine.exercises.length; i++)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 16,
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  title: Text(routine.exercises[i]),
+                ),
+              const Divider(height: 24),
+            ],
           for (var i = 0; i < widget.preview.exercises.length; i++)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -617,14 +710,16 @@ class _RoutineSharePreviewPageState extends State<RoutineSharePreviewPage> {
             ),
           if (widget.received && widget.share.status == 'pending') ...[
             const Divider(height: 32),
-            const Text(
-              'Al aceptar, tendrás una copia propia que puedes editar.',
-              style: TextStyle(color: _muted),
+            Text(
+              widget.preview.isFolder
+                  ? 'Al aceptar, se creará una carpeta propia con todas sus rutinas. Puedes editarla sin cambiar la original.'
+                  : 'Al aceptar, tendrás una copia propia que puedes editar.',
+              style: const TextStyle(color: _muted),
             ),
             const SizedBox(height: 16),
             if (_loading)
               const Center(child: CircularProgressIndicator())
-            else
+            else if (!widget.preview.isFolder)
               DropdownButtonFormField<String>(
                 initialValue: _folderId,
                 isExpanded: true,
@@ -649,7 +744,9 @@ class _RoutineSharePreviewPageState extends State<RoutineSharePreviewPage> {
             const SizedBox(height: 20),
             FilledButton.icon(
               style: FilledButton.styleFrom(foregroundColor: Colors.white),
-              key: const ValueKey('aceptar-rutina'),
+              key: ValueKey(
+                widget.preview.isFolder ? 'aceptar-carpeta' : 'aceptar-rutina',
+              ),
               onPressed:
                   _loading || _accepting || (_error != null && _folders.isEmpty)
                   ? null
@@ -662,8 +759,14 @@ class _RoutineSharePreviewPageState extends State<RoutineSharePreviewPage> {
             const SizedBox(height: 14),
             Text(_error!, style: const TextStyle(color: Color(0xFFFF7B85))),
             TextButton(
-              onPressed: _accepting ? null : _loadFolders,
-              child: const Text('Actualizar carpetas'),
+              onPressed: _accepting
+                  ? null
+                  : widget.preview.isFolder
+                  ? _accept
+                  : _loadFolders,
+              child: Text(
+                widget.preview.isFolder ? 'Reintentar' : 'Actualizar carpetas',
+              ),
             ),
           ],
         ],

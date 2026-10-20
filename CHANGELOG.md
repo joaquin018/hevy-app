@@ -5,6 +5,23 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v21] — 2026-10-20
+
+Compartir carpetas completas entre cuentas registradas.
+
+- Opción «Compartir carpeta» con selección de destinatario por correo.
+- Vista previa de todas las rutinas y ejercicios, y aceptación como una carpeta nueva con copias independientes.
+- Conservar el nombre, el orden y la configuración de ejercicios sin compartir sesiones ni récords personales.
+- Bandeja unificada de rutinas y carpetas, reintentos sin duplicados y controles de acceso entre cuentas.
+- Migración aditiva e índices de carpetas, compatibles con los envíos existentes y las pestañas anteriores.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 30 pruebas del backend y 24 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Migración y copias verificadas
+en una base desechable, incluida la aceptación concurrente y la paginación.
+
+[Cambios desde v20](https://github.com/joaquin018/hevy-app/compare/v20...v21).
+
 ## [v20] — 2026-10-20
 
 Placeholder de correo más claro al compartir rutinas.

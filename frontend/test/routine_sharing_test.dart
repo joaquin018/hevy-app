@@ -282,7 +282,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('aceptar-rutina')));
       await tester.pumpAndSettle();
       expect(accepted, isTrue);
-      expect(find.text('No tienes rutinas pendientes'), findsOneWidget);
+      expect(find.text('No tienes compartidos pendientes'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       api.close();
     },

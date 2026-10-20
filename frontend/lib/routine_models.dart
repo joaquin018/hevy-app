@@ -143,9 +143,14 @@ class RoutineShare {
     required this.recipientEmail,
     required this.status,
     required this.createdAt,
+    this.kind = 'routine',
+    this.routineCount = 1,
   });
   final String id, name, senderEmail, recipientEmail, status;
   final int exerciseCount;
+  final String kind;
+  final int routineCount;
+  bool get isFolder => kind == 'folder';
   final DateTime createdAt;
   factory RoutineShare.fromJson(Map<String, dynamic> json) => RoutineShare(
     id: json['id'] as String,
@@ -155,6 +160,8 @@ class RoutineShare {
     recipientEmail: json['recipientEmail'] as String,
     status: json['status'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    kind: json['kind'] as String? ?? 'routine',
+    routineCount: json['routineCount'] as int? ?? 1,
   );
 }
 
@@ -165,7 +172,14 @@ class RoutineSharePage {
 }
 
 class RoutinePreview {
-  const RoutinePreview({required this.name, required this.exercises});
+  const RoutinePreview({
+    required this.name,
+    required this.exercises,
+    this.isFolder = false,
+    this.routines = const [],
+  });
   final String name;
   final List<String> exercises;
+  final bool isFolder;
+  final List<RoutinePreview> routines;
 }
