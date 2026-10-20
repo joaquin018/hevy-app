@@ -2,7 +2,7 @@
   "id": "/", "name": "i7l · Entrenamiento", "short_name": "i7l",
   "lang": "es", "description": "Rutinas y registro de entrenamientos.",
   "start_url": "/", "scope": "/", "display": "standalone",
-  "background_color": "#090b0f", "theme_color": "#090b0f",
+  "background_color": "#0d1017", "theme_color": "#0d1017",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }

@@ -5,6 +5,19 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v22] — 2026-10-20
+
+Fondo de inicio uniforme con el icono de la aplicación.
+
+- Usar `#0d1017`, el color de fondo del icono, en el arranque de la PWA.
+- Unificar el fondo y el color de tema del manifiesto y la página inicial para integrar el logotipo.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: coincidencia de colores comprobada en ambos iconos, el manifiesto
+y la página inicial; compilación web correcta.
+
+[Cambios desde v21](https://github.com/joaquin018/hevy-app/compare/v21...v22).
+
 ## [v21] — 2026-10-20
 
 Compartir carpetas completas entre cuentas registradas.
