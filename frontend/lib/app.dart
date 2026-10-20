@@ -11,6 +11,7 @@ import 'workout_history_page.dart';
 import 'auth_controller.dart';
 import 'sign_in_page.dart';
 import 'routine_sharing_page.dart';
+import 'rest_timer_state.dart';
 
 const _accent = Color(0xFF7C8CFF);
 const _page = Color(0xFF090B0F);
@@ -27,6 +28,7 @@ class _ActiveWorkout {
     required this.originalExercises,
     required this.firstExercise,
     required this.results,
+    this.restTimer,
   });
 
   final String routineName;
@@ -35,6 +37,7 @@ class _ActiveWorkout {
   final List<String> originalExercises;
   final String firstExercise;
   final Map<String, List<WorkoutSetPayload>> results;
+  final RestTimerState? restTimer;
 }
 
 final _activeWorkout = ValueNotifier<_ActiveWorkout?>(null);
@@ -1705,12 +1708,10 @@ class WorkoutPage extends StatefulWidget {
   State<WorkoutPage> createState() => _WorkoutPageState();
 }
 
-class _WorkoutPageState extends State<WorkoutPage> {
-  Timer? _restTicker;
+class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
   Timer? _workoutTicker;
   Timer? _draftSaveDebounce;
-  int? _remainingSeconds;
-  int _totalSeconds = 1;
+  RestTimerState? _restTimer;
   int _elapsedSeconds = 0;
   double _totalVolume = 0;
   bool _workoutClosed = false;
@@ -1764,6 +1765,11 @@ class _WorkoutPageState extends State<WorkoutPage> {
     final startedAt = widget.resumeStartedAt ?? DateTime.now();
     _startedAt = startedAt;
     _elapsedSeconds = DateTime.now().difference(startedAt).inSeconds;
+    final active = _activeWorkout.value;
+    final restTimer = active?.startedAt == startedAt ? active?.restTimer : null;
+    if (restTimer != null && restTimer.remainingSecondsAt(DateTime.now()) > 0) {
+      _restTimer = restTimer;
+    }
     final activeWorkout = _ActiveWorkout(
       routineName: widget.routineName ?? 'Rutina',
       startedAt: startedAt,
@@ -1773,15 +1779,36 @@ class _WorkoutPageState extends State<WorkoutPage> {
           ? 'Sin ejercicios'
           : _exerciseOrder.first,
       results: _copyWorkoutResults(),
+      restTimer: _restTimer,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _workoutClosed) return;
       _activeWorkout.value = activeWorkout;
       _persistActiveWorkout();
     });
     _loadPreviousHistory();
+    WidgetsBinding.instance.addObserver(this);
     _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _elapsedSeconds++);
+      _refreshTimers();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !widget.isEditing) {
+      _refreshTimers();
+    }
+  }
+
+  void _refreshTimers() {
+    if (!mounted || _workoutClosed) return;
+    final now = DateTime.now();
+    final restExpired = _restTimer?.remainingSecondsAt(now) == 0;
+    setState(() {
+      _elapsedSeconds = now.difference(_startedAt).inSeconds;
+      if (restExpired) _restTimer = null;
+    });
+    if (restExpired) _syncActiveWorkout(persistDraft: false);
   }
 
   static String _setLabelFor(String type, int index) => switch (type) {
@@ -1953,7 +1980,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
       );
   }
 
-  void _syncActiveWorkout() {
+  void _syncActiveWorkout({bool persistDraft = true}) {
     if (widget.isEditing) return;
     final active = _activeWorkout.value;
     if (active == null) return;
@@ -1966,8 +1993,9 @@ class _WorkoutPageState extends State<WorkoutPage> {
           ? 'Sin ejercicios'
           : _exerciseOrder.first,
       results: _copyWorkoutResults(),
+      restTimer: _restTimer,
     );
-    _scheduleDraftSave();
+    if (persistDraft) _scheduleDraftSave();
   }
 
   void _removeExercise(String exercise) {
@@ -2012,33 +2040,24 @@ class _WorkoutPageState extends State<WorkoutPage> {
   }
 
   void _startRestTimer(int seconds) {
-    _restTicker?.cancel();
-    setState(() {
-      _totalSeconds = seconds;
-      _remainingSeconds = seconds;
-    });
-    _restTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _remainingSeconds == null) return;
-      if (_remainingSeconds! <= 1) {
-        _skipRestTimer();
-      } else {
-        setState(() => _remainingSeconds = _remainingSeconds! - 1);
-      }
-    });
+    if (widget.isEditing) return;
+    _updateRestTimer(
+      seconds <= 0
+          ? null
+          : RestTimerState(
+              endsAt: DateTime.now().add(Duration(seconds: seconds)),
+              totalSeconds: seconds,
+            ),
+    );
   }
 
   void _adjustTimer(int seconds) {
-    if (_remainingSeconds == null) return;
-    setState(() {
-      _remainingSeconds = (_remainingSeconds! + seconds).clamp(0, 3599);
-      _totalSeconds = _totalSeconds.clamp(_remainingSeconds!, 3599);
-    });
-    if (_remainingSeconds == 0) _skipRestTimer();
+    _updateRestTimer(_restTimer?.adjustedBy(seconds, DateTime.now()));
   }
 
-  void _skipRestTimer() {
-    _restTicker?.cancel();
-    if (mounted) setState(() => _remainingSeconds = null);
+  void _updateRestTimer(RestTimerState? timer) {
+    setState(() => _restTimer = timer);
+    _syncActiveWorkout(persistDraft: false);
   }
 
   Future<void> _showFinishSheet() {
@@ -2140,7 +2159,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
 
   @override
   void dispose() {
-    _restTicker?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _workoutTicker?.cancel();
     _draftSaveDebounce?.cancel();
     if (!widget.isEditing && !_workoutClosed) {
@@ -2151,6 +2170,8 @@ class _WorkoutPageState extends State<WorkoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final remainingSeconds =
+        _restTimer?.remainingSecondsAt(DateTime.now()) ?? 0;
     return Scaffold(
       body: _AtmosphericBackground(
         child: SafeArea(
@@ -2236,11 +2257,11 @@ class _WorkoutPageState extends State<WorkoutPage> {
           ),
         ),
       ),
-      bottomNavigationBar: _remainingSeconds == null
+      bottomNavigationBar: remainingSeconds == 0
           ? null
           : _ActiveRestTimer(
-              remainingSeconds: _remainingSeconds!,
-              totalSeconds: _totalSeconds,
+              remainingSeconds: remainingSeconds,
+              totalSeconds: _restTimer!.totalSeconds,
               onDecrease: () => _adjustTimer(-15),
               onIncrease: () => _adjustTimer(15),
             ),

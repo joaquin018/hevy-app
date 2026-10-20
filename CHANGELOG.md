@@ -5,6 +5,19 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v18] — 2026-10-20
+
+El descanso continúa al salir de la pantalla de entrenamiento.
+
+- Conservar el temporizador y los ajustes de ±15 segundos al retroceder y retomar el entrenamiento.
+- Calcular el tiempo restante desde la hora de finalización, incluido el tiempo fuera de la pantalla o en segundo plano.
+- Evitar que un descanso terminado se reinicie o que un entrenamiento nuevo herede el anterior.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 16 pruebas del frontend, análisis estático y compilación web correctos.
+
+[Cambios desde v17](https://github.com/joaquin018/hevy-app/compare/v17...v18).
+
 ## [v17] — 2026-10-20
 
 Búsqueda de ejercicios con o sin tildes.
