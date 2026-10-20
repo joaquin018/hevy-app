@@ -5,6 +5,18 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v20] — 2026-10-20
+
+Placeholder de correo más claro al compartir rutinas.
+
+- Mostrar «Ej.: persona@gmail.com» en gris y cursiva para distinguirlo del correo ingresado.
+- Mantener visible la etiqueta «Correo de Google» cuando el campo está vacío.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 7 pruebas de compartir rutinas, análisis estático y compilación web correctos.
+
+[Cambios desde v19](https://github.com/joaquin018/hevy-app/compare/v19...v20).
+
 ## [v19] — 2026-10-20
 
 Las series de calentamiento conservan la marca W.

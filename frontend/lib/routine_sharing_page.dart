@@ -156,7 +156,12 @@ class _ShareRoutineDialogState extends State<ShareRoutineDialog> {
                 autocorrect: false,
                 decoration: const InputDecoration(
                   labelText: 'Correo de Google',
-                  hintText: 'persona@gmail.com',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText: 'Ej.: persona@gmail.com',
+                  hintStyle: TextStyle(
+                    color: _muted,
+                    fontStyle: FontStyle.italic,
+                  ),
                   helperText: 'Escribe al menos 3 caracteres',
                 ),
                 onChanged: _changed,
