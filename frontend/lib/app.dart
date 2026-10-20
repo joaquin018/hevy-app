@@ -1890,16 +1890,25 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
           final comparableSetCount = currentSets.length < previousSets.length
               ? currentSets.length
               : previousSets.length;
+          final currentResults = _workoutResults[exercise];
           for (var index = 0; index < comparableSetCount; index++) {
             final previous = previousSets[index];
             final current = currentSets[index];
+            final currentResult = index < (currentResults?.length ?? 0)
+                ? currentResults![index]
+                : null;
+            final label = currentResult != null
+                ? _setLabelFor(currentResult.type, index)
+                : widget.resumeStartedAt == null
+                ? _setLabelFor(previous.type, index)
+                : current.set;
             final kg = previous.kg == previous.kg.roundToDouble()
                 ? previous.kg.round().toString()
                 : previous.kg
                       .toStringAsFixed(2)
                       .replaceFirst(RegExp(r'\.?0+$'), '');
             currentSets[index] = _SetData(
-              current.set,
+              label,
               '${kg}kg x ${previous.reps}',
               current.kg,
               current.reps,
@@ -3132,6 +3141,20 @@ class _SetData {
   final String? placeholderKg;
   final String? placeholderReps;
   final bool completed;
+
+  WorkoutSetPayload get payload => WorkoutSetPayload(
+    type: switch (set) {
+      'W' => 'warmup',
+      'F' => 'failure',
+      'D' => 'drop',
+      _ => 'normal',
+    },
+    kg: double.tryParse(kg) ?? 0,
+    reps: int.tryParse(reps) ?? 0,
+    completed: completed,
+    kgInput: kg,
+    repsInput: reps,
+  );
 }
 
 class _ExerciseCard extends StatefulWidget {
@@ -3166,22 +3189,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   int? _personalRecordSetIndex;
   final Map<int, bool> _personalRecordCandidates = {};
   late final List<_SetData> _sets = List.of(widget.sets);
-  late final List<WorkoutSetPayload> _results = [
-    for (final set in widget.sets)
-      WorkoutSetPayload(
-        type: switch (set.set) {
-          'W' => 'warmup',
-          'F' => 'failure',
-          'D' => 'drop',
-          _ => 'normal',
-        },
-        kg: double.tryParse(set.kg) ?? 0,
-        reps: int.tryParse(set.reps) ?? 0,
-        completed: set.completed,
-        kgInput: set.kg,
-        repsInput: set.reps,
-      ),
-  ];
+  late final List<WorkoutSetPayload> _results;
 
   double? get _previousBestKg {
     final values = _sets
@@ -3202,6 +3210,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   @override
   void initState() {
     super.initState();
+    _results = [for (final set in _sets) set.payload];
     _loadRestTimer();
   }
 
@@ -3222,18 +3231,11 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     for (var index = 0; index < widget.sets.length; index++) {
       if (index >= _sets.length) {
         _sets.add(widget.sets[index]);
-        _results.add(
-          const WorkoutSetPayload(
-            type: 'normal',
-            kg: 0,
-            reps: 0,
-            completed: false,
-          ),
-        );
+        _results.add(widget.sets[index].payload);
       } else {
         final current = _sets[index];
         _sets[index] = _SetData(
-          current.set,
+          widget.sets[index].set,
           widget.sets[index].previous,
           current.kg,
           current.reps,
@@ -3483,6 +3485,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           for (var index = 0; index < _sets.length; index++)
             _SetRow(
               data: _sets[index],
+              number: index + 1,
               previousBestKg: _previousBestKg,
               previousBestReps: _previousBestReps,
               showPersonalRecord: _personalRecordSetIndex == index,
@@ -4073,6 +4076,7 @@ enum _SetType { warmup, normal, failure, drop, remove }
 class _SetRow extends StatefulWidget {
   const _SetRow({
     required this.data,
+    required this.number,
     required this.previousBestKg,
     required this.previousBestReps,
     required this.showPersonalRecord,
@@ -4084,6 +4088,7 @@ class _SetRow extends StatefulWidget {
   });
 
   final _SetData data;
+  final int number;
   final double? previousBestKg;
   final int? previousBestReps;
   final bool showPersonalRecord;
@@ -4099,7 +4104,14 @@ class _SetRow extends StatefulWidget {
 
 class _SetRowState extends State<_SetRow> {
   late String _setLabel = widget.data.set;
-  late Color _setColor = widget.data.set == 'W' ? _accent : Colors.white;
+  bool _hasSelectedType = false;
+
+  Color get _setColor => switch (_setLabel) {
+    'W' => _accent,
+    'F' => const Color(0xFFFF453A),
+    'D' => const Color(0xFF35C8FF),
+    _ => Colors.white,
+  };
   late final TextEditingController _kgController = TextEditingController(
     text: widget.data.kg,
   );
@@ -4167,8 +4179,12 @@ class _SetRowState extends State<_SetRow> {
   @override
   void didUpdateWidget(covariant _SetRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data.placeholderKg == null &&
-        widget.data.placeholderKg != null) {
+    final typeChanged =
+        !_hasSelectedType && oldWidget.data.set != widget.data.set;
+    if (typeChanged) _setLabel = widget.data.set;
+    if (typeChanged ||
+        (oldWidget.data.placeholderKg == null &&
+            widget.data.placeholderKg != null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _notifyChanged();
@@ -4226,19 +4242,16 @@ class _SetRowState extends State<_SetRow> {
 
     if (type == null || !mounted) return;
     setState(() {
+      _hasSelectedType = true;
       switch (type) {
         case _SetType.warmup:
           _setLabel = 'W';
-          _setColor = _accent;
         case _SetType.normal:
-          _setLabel = widget.data.set == 'W' ? '1' : widget.data.set;
-          _setColor = Colors.white;
+          _setLabel = widget.number.toString();
         case _SetType.failure:
           _setLabel = 'F';
-          _setColor = const Color(0xFFFF453A);
         case _SetType.drop:
           _setLabel = 'D';
-          _setColor = const Color(0xFF35C8FF);
         case _SetType.remove:
           if (_completed) widget.onVolumeChanged(-_reportedVolume);
           _reportedVolume = 0;
@@ -4268,24 +4281,30 @@ class _SetRowState extends State<_SetRow> {
               onTap: _selectSetType,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: widget.showPersonalRecord
-                    ? const Tooltip(
+                child: Row(
+                  children: [
+                    Text(
+                      _setLabel,
+                      style: TextStyle(
+                        color: _setColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
+                      ),
+                    ),
+                    if (widget.showPersonalRecord) ...[
+                      const SizedBox(width: 4),
+                      const Tooltip(
                         message: 'Nuevo récord personal',
                         child: Icon(
                           Icons.workspace_premium,
                           key: ValueKey('medalla-record-personal'),
                           color: Color(0xFFFFD600),
-                          size: 25,
-                        ),
-                      )
-                    : Text(
-                        _setLabel,
-                        style: TextStyle(
-                          color: _setColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 17,
+                          size: 20,
                         ),
                       ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

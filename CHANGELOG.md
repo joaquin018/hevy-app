@@ -5,6 +5,20 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v19] — 2026-10-20
+
+Las series de calentamiento conservan la marca W.
+
+- Recuperar el tipo de las series anteriores y conservarlo al guardar o retomar el entrenamiento.
+- Mantener las selecciones del usuario cuando el historial llega con retraso.
+- Mostrar el tipo de serie junto a la medalla de récord y permitir volver a una serie normal con su número correcto.
+- Evitar series duplicadas al cargar las referencias anteriores.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 21 pruebas del frontend, análisis estático y compilación web correctos.
+
+[Cambios desde v18](https://github.com/joaquin018/hevy-app/compare/v18...v19).
+
 ## [v18] — 2026-10-20
 
 El descanso continúa al salir de la pantalla de entrenamiento.
