@@ -2349,6 +2349,9 @@ class _AddExercisePageState extends State<AddExercisePage> {
       final savedExercises = await _workoutApi.getExercises();
       if (!mounted) return;
       setState(() {
+        _exercises
+          ..clear()
+          ..addAll(_defaultExercises);
         for (final saved in savedExercises.reversed) {
           _exercises.removeWhere(
             (exercise) => exercise.$1.toLowerCase() == saved.name.toLowerCase(),
@@ -2433,30 +2436,34 @@ class _AddExercisePageState extends State<AddExercisePage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Ejercicios recientes',
+                    'Catálogo de ejercicios',
                     style: TextStyle(color: _muted, fontSize: 16),
                   ),
                 ),
               ),
               Expanded(
-                child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    0,
-                    16,
-                    MediaQuery.paddingOf(context).bottom + 28,
+                child: RefreshIndicator(
+                  onRefresh: _loadExercises,
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      0,
+                      16,
+                      MediaQuery.paddingOf(context).bottom + 28,
+                    ),
+                    itemCount: _filteredExercises.length,
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, indent: 68, color: _border),
+                    itemBuilder: (context, index) {
+                      final exercise = _filteredExercises[index];
+                      return _ExercisePickerRow(
+                        name: exercise.$1,
+                        muscle: exercise.$2,
+                        onTap: () => Navigator.of(context).pop(exercise.$1),
+                      );
+                    },
                   ),
-                  itemCount: _filteredExercises.length,
-                  separatorBuilder: (_, _) =>
-                      const Divider(height: 1, indent: 68, color: _border),
-                  itemBuilder: (context, index) {
-                    final exercise = _filteredExercises[index];
-                    return _ExercisePickerRow(
-                      name: exercise.$1,
-                      muscle: exercise.$2,
-                      onTap: () => Navigator.of(context).pop(exercise.$1),
-                    );
-                  },
                 ),
               ),
             ],
@@ -2640,6 +2647,13 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
                   ),
                   child: Column(
                     children: [
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 20),
+                        child: Text(
+                          'El nombre y el grupo muscular estarán disponibles para todos. Tus resultados y descansos seguirán siendo personales.',
+                          style: TextStyle(color: _muted, height: 1.5),
+                        ),
+                      ),
                       TextField(
                         key: const ValueKey('nombre-ejercicio'),
                         controller: _nameController,

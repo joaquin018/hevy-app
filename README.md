@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v23**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v24**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `24`
+Para publicar otra versión después de terminar los cambios (sustituye `25`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 24
-# Añade una sección ## [v24] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v24
+bun scripts/version.mjs prepare 25
+# Añade una sección ## [v25] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v25
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v24'
-git tag -a v24 -m 'v24: descripción de los cambios'
-git push --atomic origin master v24
-bun scripts/version.mjs notes v24 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v24 --verify-tag --title 'v24 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v25'
+git tag -a v25 -m 'v25: descripción de los cambios'
+git push --atomic origin master v25
+bun scripts/version.mjs notes v25 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v25 --verify-tag --title 'v25 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -166,13 +166,33 @@ Los resultados inferiores permanecen en el historial, pero no reemplazan la
 referencia que aparece en la columna `Anterior`.
 
 Cada cuenta accede con Google y utiliza su correo verificado como nombre.
-Las cuentas nuevas empiezan vacías. Con `LEGACY_OWNER_EMAIL` vacío, los datos
-antiguos del usuario compartido se conservan sin asignarse a ninguna cuenta nueva.
-Rutinas, ejercicios, borradores, historial y récords se filtran por el usuario
+Las cuentas nuevas empiezan sin rutinas ni entrenamientos, con acceso al catálogo
+global de ejercicios. Con `LEGACY_OWNER_EMAIL` vacío, los datos personales antiguos
+del usuario compartido se conservan sin asignarse a ninguna cuenta nueva.
+Rutinas, descansos, borradores, historial y récords se filtran por el usuario
 de la sesión autenticada. La API rechaza peticiones de una pestaña que todavía
 muestra una cuenta distinta de la cookie actual. Consulta
 [la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
 `app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
+
+## Catálogo global de ejercicios
+
+Los ejercicios creados por cualquier cuenta aparecen en **Agregar ejercicio**
+para todos los usuarios. Se pueden buscar y seleccionar directamente, o actualizar
+el catálogo deslizando hacia abajo. Solo se comparten el nombre y el grupo muscular;
+los pesos, las repeticiones, las marcas y el descanso siguen siendo personales.
+El formulario de creación explica qué información estará disponible para todos.
+
+Al iniciar, el backend crea `exercise_catalog` e incorpora también los ejercicios
+existentes. La migración conserva los identificadores de los ejercicios personales
+y sus referencias a sesiones y récords. Las altas posteriores, los entrenamientos
+guardados y las importaciones de rutinas o carpetas alimentan el mismo catálogo.
+
+Los nombres se deduplican ignorando mayúsculas y espacios al principio o al final.
+Se conserva la primera descripción publicada; si falta el grupo muscular, una
+aportación posterior puede completarlo. El catálogo permanece aunque se elimine
+la cuenta que creó el ejercicio. `GET /exercises` y `POST /exercises` mantienen
+el formato `{ name, muscleGroup }` y requieren autenticación.
 
 ## Compartir rutinas y carpetas dentro de i7l
 

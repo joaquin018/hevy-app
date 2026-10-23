@@ -2,7 +2,7 @@ name: hevy_hello
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 23.0.0+23
+version: 24.0.0+24
 
 environment:
   sdk: ^3.13.2

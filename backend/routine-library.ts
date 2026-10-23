@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database } from './auth.ts';
 import { exercises, routineExercises, routineFolders, routines, routineShares, users } from './schema.ts';
 import type { RoutineSnapshot, FolderSnapshot } from './schema.ts';
+import { publishExercises } from './exercise-catalog.ts';
 
 export class RoutineError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -309,6 +310,7 @@ export class RoutineLibrary {
         const distinct = [...new Map(allExercises.map(e => [normalize(e.name), e])).values()];
         await tx.insert(exercises).values(distinct.map(e => ({ userId, name: e.name, normalizedName: normalize(e.name), muscleGroup: e.muscleGroup, restSeconds: e.restSeconds })))
           .onConflictDoNothing({ target: [exercises.userId, exercises.normalizedName] });
+        await publishExercises(tx, distinct);
       }
       await tx.update(routineShares).set({ status: 'accepted', importedRoutineId: isFolder ? null : copies[0].id,
         importedFolderId: isFolder ? folder.id : null, resolvedAt: new Date() }).where(eq(routineShares.id, id));

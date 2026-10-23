@@ -47,8 +47,9 @@ antes del despliegue. Las migraciones son aditivas y conservan los datos existen
 
 Verifica en una ventana privada que la app solicita Google y que
 `/api/auth/me` devuelve 401 antes del acceso. Entra con dos cuentas diferentes:
-ambas deben comenzar vacías y cada una debe conservar únicamente sus rutinas,
-ejercicios, sesiones, récords y borradores. Una pestaña abierta con otra cuenta
+las cuentas nuevas deben comenzar sin rutinas ni sesiones. El catálogo de nombres
+y grupos musculares es global; cada cuenta debe conservar únicamente sus descansos,
+sesiones, récords y borradores, además de sus rutinas. Una pestaña abierta con otra cuenta
 rechaza lecturas y escrituras cuando detecta que la cookie cambió.
 
 ## Desarrollo local

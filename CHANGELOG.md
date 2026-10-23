@@ -5,6 +5,23 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v24] — 2026-10-23
+
+Catálogo global de ejercicios para todas las cuentas.
+
+- Compartir el nombre y el grupo muscular de los ejercicios creados por cualquier usuario.
+- Incorporar automáticamente los ejercicios existentes sin modificar sus identificadores ni el historial personal.
+- Mantener separados por cuenta los pesos, las repeticiones, los récords y los tiempos de descanso.
+- Alimentar el catálogo desde la creación de ejercicios, los entrenamientos y las importaciones de rutinas o carpetas.
+- Evitar duplicados por mayúsculas o espacios y permitir actualizar el catálogo deslizando hacia abajo.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 36 pruebas del backend y 31 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Migración, uso entre cuentas
+y creación concurrente verificados en una base desechable.
+
+[Cambios desde v23](https://github.com/joaquin018/hevy-app/compare/v23...v24).
+
 ## [v23] — 2026-10-23
 
 Rellenar los resultados anteriores al completar una serie.

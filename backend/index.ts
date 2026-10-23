@@ -6,9 +6,11 @@ import { buildWorkoutHistory } from './workout-history.ts';
 import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, validateAuthConfig, type Database, type AuthConfig, type GoogleProvider } from './auth.ts';
 import { migrateAuth } from './auth-migration.ts';
 import { RoutineError, RoutineLibrary } from './routine-library.ts';
+import { publishExercises } from './exercise-catalog.ts';
 
 import {
   activeWorkoutDrafts,
+  exerciseCatalog,
   exercises,
   exerciseRecords,
   workoutSessionExercises,
@@ -156,34 +158,38 @@ app.delete('/workout-draft', async ({ userId }) => {
   return { deleted: true };
 });
 
-app.get('/exercises', async ({ userId }) => {
+app.get('/exercises', async () => {
   return db
-    .select({ name: exercises.name, muscleGroup: exercises.muscleGroup })
-    .from(exercises)
-    .where(eq(exercises.userId, userId))
-    .orderBy(desc(exercises.createdAt));
+    .select({ name: exerciseCatalog.name, muscleGroup: exerciseCatalog.muscleGroup })
+    .from(exerciseCatalog)
+    .orderBy(desc(exerciseCatalog.createdAt), asc(exerciseCatalog.name));
 });
 
 app.post(
   '/exercises',
   async ({ body, set, userId }) => {
-    const [exercise] = await db.transaction(async (tx) => {
-      return tx
+    const name = body.name.trim(), muscleGroup = body.muscleGroup.trim();
+    if (!name || !muscleGroup) throw new RoutineError(400, 'INVALID_EXERCISE', 'Escribe el nombre y el grupo muscular del ejercicio.');
+    const exercise = await db.transaction(async (tx) => {
+      await tx
         .insert(exercises)
         .values({
           userId: userId,
-          name: body.name.trim(),
-          normalizedName: normalizeName(body.name),
-          muscleGroup: body.muscleGroup.trim(),
+          name,
+          normalizedName: normalizeName(name),
+          muscleGroup,
         })
         .onConflictDoUpdate({
           target: [exercises.userId, exercises.normalizedName],
           set: {
-            name: body.name.trim(),
-            muscleGroup: body.muscleGroup.trim(),
+            name,
+            muscleGroup,
           },
-        })
-        .returning({ name: exercises.name, muscleGroup: exercises.muscleGroup });
+        });
+      await publishExercises(tx, [{ name, muscleGroup }]);
+      const [entry] = await tx.select({ name: exerciseCatalog.name, muscleGroup: exerciseCatalog.muscleGroup })
+        .from(exerciseCatalog).where(eq(exerciseCatalog.normalizedName, normalizeName(name)));
+      return entry;
     });
     set.status = 201;
     return exercise;
@@ -219,8 +225,8 @@ app.get(
 app.put(
   '/exercises/rest-timer',
   async ({ body, userId }) => {
-    const [exercise] = await db.transaction(async (tx) => {
-      return tx
+    const exercise = await db.transaction(async (tx) => {
+      const [saved] = await tx
         .insert(exercises)
         .values({
           userId: userId,
@@ -233,6 +239,8 @@ app.put(
           set: { restSeconds: body.restSeconds },
         })
         .returning({ restSeconds: exercises.restSeconds });
+      await publishExercises(tx, [{ name: body.name }]);
+      return saved;
     });
     return exercise;
   },
@@ -311,6 +319,7 @@ app.post(
         })
         .returning();
 
+      const catalogEntries: { name: string; muscleGroup: string | null }[] = [];
       for (const [exercisePosition, inputExercise] of body.exercises.entries()) {
         const completedSets = inputExercise.sets
           .map((workoutSet, position) => ({ workoutSet, position }))
@@ -334,6 +343,8 @@ app.post(
             },
           })
           .returning();
+
+        catalogEntries.push({ name: exercise.name, muscleGroup: exercise.muscleGroup });
 
         const [sessionExercise] = await tx
           .insert(workoutSessionExercises)
@@ -395,6 +406,7 @@ app.post(
         }
       }
 
+      await publishExercises(tx, catalogEntries);
       return session;
     });
 

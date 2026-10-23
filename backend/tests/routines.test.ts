@@ -40,7 +40,7 @@ async function send(routineId: string, version: number, recipient = bob, sender 
 }
 beforeAll(async () => { await admin`CREATE SCHEMA ${admin(schema)}`; await migrateAuth(client); });
 beforeEach(async () => {
-  await client`TRUNCATE users CASCADE`;
+  await client`TRUNCATE exercise_catalog, users CASCADE`;
   for (const a of accounts) {
     await db.insert(users).values({ id: a.id, email: a.email, googleSubject: a.name, displayName: a.email });
     await db.insert(authSessions).values({ userId: a.id, tokenHash: tokenHash(a.token), expiresAt: new Date(Date.now() + 3600000) });
@@ -151,6 +151,9 @@ test('snapshot survives source edits/deletion; accept copies settings without pr
   expect((await request('/exercises/previous?name=Press', bob)).status).toBe(404);
   expect(await (await request('/exercises/rest-timer?name=Press', bob)).json()).toEqual({ restSeconds: 240 });
   expect(await (await request('/routine-shares/pending', bob)).json()).toEqual({ pending: false });
+  const catalog = await (await request('/exercises', carol)).json();
+  expect(catalog.map((e: { name: string }) => e.name).sort()).toEqual(['Elevaciones', 'Press']);
+  expect((await request('/exercises/previous?name=Press', carol)).status).toBe(404);
 });
 test('received settings import into a new account; recipient edits leave sender untouched', async () => {
   const r = await createRoutine();

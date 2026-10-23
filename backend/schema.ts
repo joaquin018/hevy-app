@@ -39,6 +39,14 @@ export const loginAttempts = pgTable('login_attempts', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
 
+export const exerciseCatalog = pgTable('exercise_catalog', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  muscleGroup: text('muscle_group'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex('exercise_catalog_normalized_name_idx').on(table.normalizedName)]);
+
 export const exercises = pgTable(
   'exercises',
   {

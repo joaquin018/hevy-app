@@ -74,7 +74,7 @@ beforeAll(async () => {
   await migrateAuth(client);
 });
 beforeEach(async () => {
-  await client`TRUNCATE users CASCADE`;
+  await client`TRUNCATE exercise_catalog, users CASCADE`;
   await db.insert(users).values({ id: legacyId, displayName: 'Datos compartidos existentes' });
   exchangeCalls = 0;
   app = createApp(db, config, provider);
@@ -133,7 +133,7 @@ describe('Authentication and private accounts', () => {
     expect(sessions.some(session => session.tokenHash === alice.token)).toBe(false);
   });
 
-  test('routines, exercises, timers, drafts, history and records stay with their account', async () => {
+  test('exercise descriptions are global while routines, timers, drafts, history and records stay private', async () => {
     const alice = await login('alice');
     const bob = await login('bob');
     for (const [account, name, kg, restSeconds] of [[alice, 'Alice', 50, 120], [bob, 'Bob', 100, 240]] as const) {
@@ -148,8 +148,9 @@ describe('Authentication and private accounts', () => {
       const headers = bearer(account.token);
       const get = async (path: string) => (await request(path, 'GET', undefined, headers)).json();
       expect(await get('/routine-folders')).toEqual(folders(name).folders);
-      const ownExercises = await get('/exercises');
-      expect(ownExercises.map((item: { name: string }) => item.name).sort()).toEqual([`${name} exercise`, 'Press'].sort());
+      const catalog = await get('/exercises');
+      expect(catalog.map((item: { name: string }) => item.name).sort()).toEqual(['Alice exercise', 'Bob exercise', 'Press'].sort());
+      expect(Object.keys(catalog[0]).sort()).toEqual(['muscleGroup', 'name']);
       expect(await get('/exercises/rest-timer?name=Press')).toEqual({ restSeconds });
       expect((await get('/workout-draft')).routineName).toBe(name);
       const history = await get('/workout-sessions');
