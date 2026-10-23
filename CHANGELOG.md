@@ -5,6 +5,19 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v23] — 2026-10-23
+
+Rellenar los resultados anteriores al completar una serie.
+
+- Copiar el peso y las repeticiones del placeholder a los campos vacíos al marcar el check.
+- Conservar los valores introducidos, incluidos los decimales con coma y el peso cero.
+- Guardar los campos rellenados en el borrador y la sesión sin duplicar el volumen al desmarcar y volver a marcar.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 29 pruebas del frontend, análisis estático y compilación web correctos.
+
+[Cambios desde v22](https://github.com/joaquin018/hevy-app/compare/v22...v23).
+
 ## [v22] — 2026-10-20
 
 Fondo de inicio uniforme con el icono de la aplicación.

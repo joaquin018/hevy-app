@@ -4216,6 +4216,16 @@ class _SetRowState extends State<_SetRow> {
   }
 
   void _toggleCompleted() {
+    if (!_completed) {
+      if (_kgController.text.trim().isEmpty &&
+          widget.data.placeholderKg != null) {
+        _kgController.text = widget.data.placeholderKg!;
+      }
+      if (_repsController.text.trim().isEmpty &&
+          widget.data.placeholderReps != null) {
+        _repsController.text = widget.data.placeholderReps!;
+      }
+    }
     setState(() => _completed = !_completed);
     if (_completed) {
       _reportedVolume = _currentVolume;

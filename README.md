@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v22**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v23**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `23`
+Para publicar otra versión después de terminar los cambios (sustituye `24`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 23
-# Añade una sección ## [v23] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v23
+bun scripts/version.mjs prepare 24
+# Añade una sección ## [v24] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v24
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v23'
-git tag -a v23 -m 'v23: descripción de los cambios'
-git push --atomic origin master v23
-bun scripts/version.mjs notes v23 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v23 --verify-tag --title 'v23 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v24'
+git tag -a v24 -m 'v24: descripción de los cambios'
+git push --atomic origin master v24
+bun scripts/version.mjs notes v24 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v24 --verify-tag --title 'v24 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
