@@ -1774,6 +1774,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         .expand((sets) => sets)
         .where((set) => set.completed)
         .fold(0, (total, set) => total + (set.kg * set.reps));
+    _loadPreviousHistory();
     if (widget.isEditing) return;
     final startedAt = widget.resumeStartedAt ?? DateTime.now();
     _startedAt = startedAt;
@@ -1799,7 +1800,6 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
       _activeWorkout.value = activeWorkout;
       _persistActiveWorkout();
     });
-    _loadPreviousHistory();
     WidgetsBinding.instance.addObserver(this);
     _workoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       _refreshTimers();

@@ -5,6 +5,22 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v25] — 2026-10-24
+
+Mostrar los resultados anteriores al editar una rutina.
+
+- Cargar las series y los resultados personales también en «Editar rutina».
+- Mostrar los pesos y las repeticiones anteriores, incluidos los calentamientos con su marca W.
+- Conservar una serie vacía editable cuando el ejercicio todavía no tiene resultados.
+- Mantener la edición sin iniciar un entrenamiento ni guardar borradores o sesiones.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 33 pruebas del frontend, análisis estático y compilación web correctos.
+La prueba de regresión reproduce el fallo original y verifica la carga de cuatro
+series, incluidos dos calentamientos.
+
+[Cambios desde v24](https://github.com/joaquin018/hevy-app/compare/v24...v25).
+
 ## [v24] — 2026-10-23
 
 Catálogo global de ejercicios para todas las cuentas.

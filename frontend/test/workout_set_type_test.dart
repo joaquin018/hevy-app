@@ -18,6 +18,7 @@ Future<void> _openWorkout(
   WidgetTester tester, {
   Map<String, List<WorkoutSetPayload>> results = const {},
   bool resuming = false,
+  bool editing = false,
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -31,6 +32,7 @@ Future<void> _openWorkout(
               MaterialPageRoute<void>(
                 builder: (_) => WorkoutPage(
                   initialExercises: const ['Press'],
+                  isEditing: editing,
                   routineName: 'Empuje',
                   resumeStartedAt: resuming ? DateTime.now() : null,
                   initialResults: results,
@@ -50,6 +52,97 @@ Future<void> _openWorkout(
 void main() {
   setUp(clearActiveWorkout);
   tearDown(clearActiveWorkout);
+
+  testWidgets(
+    'editing a routine loads previous results without starting a workout',
+    (tester) async {
+      final requests = <http.Request>[];
+      final client = MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/exercises/previous') {
+          expect(request.url.queryParameters['name'], 'Press');
+          return _json({
+            'sets': [
+              {'type': 'warmup', 'kg': 22, 'reps': 12},
+              {'type': 'warmup', 'kg': 34, 'reps': 6},
+              {'type': 'normal', 'kg': 58, 'reps': 9},
+              {'type': 'normal', 'kg': 58, 'reps': 5},
+            ],
+          });
+        }
+        return _json({'restSeconds': 60});
+      });
+      await http.runWithClient(() async {
+        await _openWorkout(tester, editing: true);
+        expect(find.text('Editar Empuje'), findsOneWidget);
+        expect(find.text('W'), findsNWidgets(2));
+        expect(find.text('3'), findsOneWidget);
+        expect(find.text('4'), findsOneWidget);
+        for (final result in [
+          '22kg x 12',
+          '34kg x 6',
+          '58kg x 9',
+          '58kg x 5',
+        ]) {
+          expect(find.text(result), findsOneWidget);
+        }
+        final fields = tester.widgetList<TextField>(find.byType(TextField));
+        expect(
+          fields.map((field) => field.controller!.text),
+          everyElement(isEmpty),
+        );
+        expect(fields.map((field) => field.decoration!.hintText), [
+          '22',
+          '12',
+          '34',
+          '6',
+          '58',
+          '9',
+          '58',
+          '5',
+        ]);
+        await tester.tap(find.byKey(const ValueKey('checkbox-W')).first);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('guardar-rutina')));
+        await tester.pumpAndSettle();
+        expect(find.text('Iniciar'), findsOneWidget);
+        expect(
+          requests.where(
+            (request) => request.url.path == '/exercises/previous',
+          ),
+          hasLength(1),
+        );
+        expect(requests.map((request) => request.method), everyElement('GET'));
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, () => client);
+    },
+  );
+
+  testWidgets(
+    'a routine without previous results keeps an empty editable set',
+    (tester) async {
+      final client = MockClient((request) async {
+        if (request.url.path == '/exercises/previous') {
+          return http.Response('{}', 404);
+        }
+        return _json({'restSeconds': 60});
+      });
+      await http.runWithClient(() async {
+        await _openWorkout(tester, editing: true);
+        expect(find.byKey(const ValueKey('checkbox-1')), findsOneWidget);
+        expect(find.text('—'), findsOneWidget);
+        await tester.enterText(find.byKey(const ValueKey('kg-1')), '20');
+        await tester.enterText(
+          find.byKey(const ValueKey('repeticiones-1')),
+          '10',
+        );
+        await tester.tap(find.byKey(const ValueKey('guardar-rutina')));
+        await tester.pumpAndSettle();
+        expect(find.text('Iniciar'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, () => client);
+    },
+  );
 
   testWidgets('previous set types keep their labels when loaded and saved', (
     tester,
