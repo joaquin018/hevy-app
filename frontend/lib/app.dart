@@ -3212,7 +3212,7 @@ class _ExerciseCard extends StatefulWidget {
 
 class _ExerciseCardState extends State<_ExerciseCard> {
   final WorkoutApi _workoutApi = WorkoutApi();
-  int _restMinutes = 3;
+  int _restSeconds = 180;
   int? _personalRecordSetIndex;
   final Map<int, bool> _personalRecordCandidates = {};
   late final List<_SetData> _sets = List.of(widget.sets);
@@ -3245,7 +3245,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
     try {
       final seconds = await _workoutApi.getRestTimerSeconds(widget.name);
       if (!mounted) return;
-      setState(() => _restMinutes = (seconds / 60).round().clamp(1, 5));
+      setState(() => _restSeconds = seconds.clamp(60, 300));
     } catch (_) {
       // Se conserva el valor predeterminado si no hay conexión.
     }
@@ -3408,7 +3408,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   }
 
   Future<void> _openRestTimer() async {
-    final minutes = await showModalBottomSheet<int>(
+    final seconds = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: _card,
       barrierColor: Colors.black.withValues(alpha: 0.72),
@@ -3419,15 +3419,15 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       ),
       builder: (_) => _RestTimerSheet(
         exerciseName: widget.name,
-        initialMinutes: _restMinutes,
+        initialSeconds: _restSeconds,
       ),
     );
-    if (minutes != null && mounted) {
-      setState(() => _restMinutes = minutes);
+    if (seconds != null && mounted) {
+      setState(() => _restSeconds = seconds);
       try {
         await _workoutApi.saveRestTimerSeconds(
           exerciseName: widget.name,
-          restSeconds: minutes * 60,
+          restSeconds: seconds,
         );
       } catch (_) {
         if (!mounted) return;
@@ -3523,7 +3523,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               onPersonalRecordChanged: (isRecord) =>
                   _updatePersonalRecordCandidate(index, isRecord),
               onRemoved: () => _removeSet(index),
-              onCompleted: () => widget.onSetCompleted(_restMinutes * 60),
+              onCompleted: () => widget.onSetCompleted(_restSeconds),
               onVolumeChanged: widget.onVolumeChanged,
             ),
           const SizedBox(height: 10),
@@ -3973,21 +3973,29 @@ class _ExerciseOption extends StatelessWidget {
 class _RestTimerSheet extends StatefulWidget {
   const _RestTimerSheet({
     required this.exerciseName,
-    required this.initialMinutes,
+    required this.initialSeconds,
   });
 
   final String exerciseName;
-  final int initialMinutes;
+  final int initialSeconds;
 
   @override
   State<_RestTimerSheet> createState() => _RestTimerSheetState();
 }
 
 class _RestTimerSheetState extends State<_RestTimerSheet> {
+  static const _minimumSeconds = 60;
+  static const _stepSeconds = 30;
+  static const _optionCount = 9;
+  late int _selectedIndex =
+      ((widget.initialSeconds - _minimumSeconds) / _stepSeconds).round().clamp(
+        0,
+        _optionCount - 1,
+      );
   late final _scrollController = FixedExtentScrollController(
-    initialItem: widget.initialMinutes - 1,
+    initialItem: _selectedIndex,
   );
-  late int _selectedMinutes = widget.initialMinutes;
+  int get _selectedSeconds => _minimumSeconds + _selectedIndex * _stepSeconds;
 
   @override
   void dispose() {
@@ -4024,13 +4032,14 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
                 diameterRatio: 1.6,
                 physics: const FixedExtentScrollPhysics(),
                 onSelectedItemChanged: (index) {
-                  setState(() => _selectedMinutes = index + 1);
+                  setState(() => _selectedIndex = index);
                 },
                 childDelegate: ListWheelChildBuilderDelegate(
-                  childCount: 5,
+                  childCount: _optionCount,
                   builder: (context, index) {
-                    final minutes = index + 1;
-                    final selected = minutes == _selectedMinutes;
+                    final seconds = _minimumSeconds + index * _stepSeconds;
+                    final minutes = seconds ~/ 60;
+                    final selected = index == _selectedIndex;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       alignment: Alignment.center,
@@ -4040,7 +4049,7 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child: Text(
-                        '$minutes min',
+                        '$minutes min${seconds % 60 == 0 ? '' : ' 30s'}',
                         style: TextStyle(
                           color: selected ? Colors.white : _muted,
                           fontSize: selected ? 20 : 17,
@@ -4056,7 +4065,7 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
               width: double.infinity,
               height: 43,
               child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(_selectedMinutes),
+                onPressed: () => Navigator.of(context).pop(_selectedSeconds),
                 style: FilledButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,

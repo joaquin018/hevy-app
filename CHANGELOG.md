@@ -5,6 +5,22 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v26] — 2026-10-24
+
+Más opciones para el temporizador de descanso.
+
+- Ofrecer nueve duraciones cada 30 segundos, desde 1 min hasta 5 min.
+- Añadir 1 min 30s, 2 min 30s, 3 min 30s y 4 min 30s al selector.
+- Conservar la duración en segundos al guardar, cargar y empezar el descanso.
+- Mantener los tiempos intermedios al salir y retomar el entrenamiento.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 35 pruebas del frontend, análisis estático y compilación web correctos.
+Verificados el guardado y el inicio de las nueve duraciones, además de la carga
+y la persistencia del descanso de 1 min 30s al retomar el entrenamiento.
+
+[Cambios desde v25](https://github.com/joaquin018/hevy-app/compare/v25...v26).
+
 ## [v25] — 2026-10-24
 
 Mostrar los resultados anteriores al editar una rutina.
