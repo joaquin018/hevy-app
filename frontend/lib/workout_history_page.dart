@@ -130,11 +130,6 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Cada entrenamiento cuenta.',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
             Text(
               '$_total ${_total == 1 ? 'entrenamiento guardado' : 'entrenamientos guardados'}',
               style: const TextStyle(color: _muted),

@@ -5,6 +5,17 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v27] — 2026-10-24
+
+Simplificar la cabecera del historial.
+
+- Eliminar el texto motivacional «Cada entrenamiento cuenta.» y su espacio adicional.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: análisis estático de la pantalla de historial sin errores.
+
+[Cambios desde v26](https://github.com/joaquin018/hevy-app/compare/v26...v27).
+
 ## [v26] — 2026-10-24
 
 Más opciones para el temporizador de descanso.
