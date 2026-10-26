@@ -18,6 +18,7 @@ import {
   workoutSessionExercises,
   workoutSessions,
   workoutSets,
+  users,
 } from './schema.ts';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -224,6 +225,17 @@ app.post(
     }),
   },
 );
+
+app.get('/workout-settings', async ({ userId }) => {
+  const [settings] = await db.select({ betweenExercisesSeconds: users.betweenExercisesSeconds })
+    .from(users).where(eq(users.id, userId));
+  return settings;
+});
+app.put('/workout-settings', async ({ body, userId }) => {
+  const [settings] = await db.update(users).set({ betweenExercisesSeconds: body.betweenExercisesSeconds })
+    .where(eq(users.id, userId)).returning({ betweenExercisesSeconds: users.betweenExercisesSeconds });
+  return settings;
+}, { body: t.Object({ betweenExercisesSeconds: t.Integer({ minimum: 60, maximum: 300, multipleOf: 30 }) }) });
 
 app.get(
   '/exercises/rest-timer',

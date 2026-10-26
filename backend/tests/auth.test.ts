@@ -98,6 +98,7 @@ describe('Authentication and private accounts', () => {
     for (const [path, method, body] of [
       ['/auth/me', 'GET'], ['/exercises', 'GET'], ['/routine-folders', 'GET'],
       ['/workout-sessions', 'GET'], ['/workout-draft', 'GET'], ['/workout-draft', 'DELETE'],
+      ['/workout-settings', 'GET'], ['/workout-settings', 'PUT', { betweenExercisesSeconds: 180 }],
       [`/workout-sessions/${randomUUID()}`, 'DELETE'],
       ['/exercises/rest-timer?name=Press', 'GET'], ['/exercises/previous?name=Press', 'GET'],
       ['/exercises', 'POST', { name: 'Press', muscleGroup: 'Pecho' }],
@@ -109,6 +110,29 @@ describe('Authentication and private accounts', () => {
       expect(response.status, `${method} ${path}`).toBe(401);
       expect(response.headers.get('cache-control')).toBe('no-store');
     }
+  });
+
+  test('between-exercise rest defaults to three minutes, persists privately and leaves set rests unchanged', async () => {
+    const alice = await login('alice'), bob = await login('bob');
+    const a = bearer(alice.token), b = bearer(bob.token);
+    const settings = async (headers: Record<string, string>) => (await request('/workout-settings', 'GET', undefined, headers)).json();
+    expect(await settings(a)).toEqual({ betweenExercisesSeconds: 180 });
+    expect((await request('/exercises/rest-timer', 'PUT', { name: 'Press', restSeconds: 60 }, a)).status).toBe(200);
+    for (const seconds of [60, 90, 120, 150, 180, 210, 240, 270, 300]) {
+      const saved = await request('/workout-settings', 'PUT', { betweenExercisesSeconds: seconds }, a);
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ betweenExercisesSeconds: seconds });
+      expect(await settings(b)).toEqual({ betweenExercisesSeconds: 180 });
+    }
+    for (const value of [0, 59, 61, 301, 90.5, 'invalid', null]) {
+      expect((await request('/workout-settings', 'PUT', { betweenExercisesSeconds: value }, a)).status, String(value)).toBe(422);
+    }
+    expect((await request('/workout-settings', 'PUT', { betweenExercisesSeconds: 90 }, { ...a, origin: 'https://other.example.com' })).status).toBe(403);
+    expect((await request('/workout-settings', 'PUT', { betweenExercisesSeconds: 90 }, { ...a, 'x-i7l-user': bob.user.id })).status).toBe(409);
+    await migrateAuth(client);
+    expect(await settings(a)).toEqual({ betweenExercisesSeconds: 300 });
+    expect(await settings(b)).toEqual({ betweenExercisesSeconds: 180 });
+    expect(await (await request('/exercises/rest-timer?name=Press', 'GET', undefined, a)).json()).toEqual({ restSeconds: 60 });
   });
 
   test('missing Google credentials give a recoverable unavailable response', async () => {

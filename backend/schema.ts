@@ -18,6 +18,7 @@ export const users = pgTable('users', {
   email: text('email'),
   googleSubject: text('google_subject').unique(),
   routineVersion: integer('routine_version').notNull().default(0),
+  betweenExercisesSeconds: integer('between_exercises_seconds').notNull().default(180),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('users_email_prefix_idx').on(sql`lower(${table.email}) COLLATE "C"`)
   .where(sql`${table.googleSubject} IS NOT NULL AND ${table.email} IS NOT NULL`)]);

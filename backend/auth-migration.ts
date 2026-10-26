@@ -10,6 +10,8 @@ export async function migrateAuth(client: Sql) {
     await tx.unsafe(schema);
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject TEXT`;
+    await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS between_exercises_seconds INTEGER NOT NULL DEFAULT 180
+      CHECK (between_exercises_seconds BETWEEN 60 AND 300 AND between_exercises_seconds % 30 = 0)`;
     await tx`CREATE UNIQUE INDEX IF NOT EXISTS users_google_subject_idx ON users(google_subject)`;
     await tx`CREATE TABLE IF NOT EXISTS auth_sessions (
       token_hash TEXT PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,8 +1,15 @@
 class RestTimerState {
-  const RestTimerState({required this.endsAt, required this.totalSeconds});
+  const RestTimerState({
+    required this.endsAt,
+    required this.totalSeconds,
+    this.betweenExercises = false,
+    this.exerciseName,
+  });
 
   final DateTime endsAt;
   final int totalSeconds;
+  final bool betweenExercises;
+  final String? exerciseName;
 
   int remainingSecondsAt(DateTime now) {
     final remaining = endsAt.difference(now).inMicroseconds;
@@ -19,6 +26,8 @@ class RestTimerState {
     return RestTimerState(
       endsAt: endsAt.add(Duration(seconds: adjustedRemaining - remaining)),
       totalSeconds: totalSeconds.clamp(adjustedRemaining, 3599),
+      betweenExercises: betweenExercises,
+      exerciseName: exerciseName,
     );
   }
 }

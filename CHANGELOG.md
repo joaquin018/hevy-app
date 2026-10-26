@@ -5,6 +5,25 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v34] — 2026-10-26
+
+Configurar un descanso global entre ejercicios, independiente del descanso entre series.
+
+- Añadir las opciones «Entre series» y «Entre ejercicios» al selector del reloj, con duraciones de 1 a 5 minutos en pasos de 30 segundos.
+- Guardar el descanso entre ejercicios por cuenta, con 3 minutos por defecto, conservando los descansos propios de cada ejercicio.
+- Iniciar el descanso global al marcar todas las series de un ejercicio, incluidos los calentamientos y aunque los checks se completen en otro orden.
+- Cancelar ese descanso si se desmarca una serie o se añade otra pendiente al ejercicio que lo inició.
+- Mostrar el tipo de descanso activo y conservarlo con sus ajustes de ±15 segundos al salir y retomar el entrenamiento.
+- Añadir una migración automática y los endpoints autenticados de configuración, con validación de duraciones y aislamiento entre cuentas.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 59 pruebas del backend y 53 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Verificados la persistencia de
+preferencias, los descansos independientes, el orden de los checks, la cancelación,
+la recuperación del temporizador y los errores de conexión y guardado.
+
+[Cambios desde v33](https://github.com/joaquin018/hevy-app/compare/v33...v34).
+
 ## [v33] — 2026-10-26
 
 Corregir el icono de «Comparación de resultados».

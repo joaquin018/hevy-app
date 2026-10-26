@@ -285,6 +285,27 @@ class WorkoutApi {
     return value['restSeconds'] as int;
   }
 
+  Future<int> getBetweenExercisesSeconds() async {
+    final response = await _client.get(Uri.parse('$_baseUrl/workout-settings'));
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+    return (jsonDecode(response.body)
+            as Map<String, dynamic>)['betweenExercisesSeconds']
+        as int;
+  }
+
+  Future<void> saveBetweenExercisesSeconds(int seconds) async {
+    final response = await _client.put(
+      Uri.parse('$_baseUrl/workout-settings'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'betweenExercisesSeconds': seconds}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+  }
+
   Future<void> saveRestTimerSeconds({
     required String exerciseName,
     required int restSeconds,

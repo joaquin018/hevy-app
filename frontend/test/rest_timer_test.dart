@@ -46,6 +46,7 @@ http.Client _client({int restSeconds = 60, ValueChanged<int>? onRestSaved}) =>
         '/workout-draft' => _response({}, 404),
         '/exercises/previous' => _response({'sets': []}),
         '/exercises/rest-timer' => _response({'restSeconds': restSeconds}),
+        '/workout-settings' => _response({'betweenExercisesSeconds': 180}),
         _ => throw StateError('Unexpected request: ${request.url}'),
       };
     });
@@ -57,6 +58,8 @@ Future<void> _startWorkout(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey('iniciar-rutina-Empuje')));
   await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('añadir-serie-Press')));
+  await tester.pump();
   await tester.tap(find.byKey(const ValueKey('checkbox-1')));
   await tester.pump();
 }

@@ -1843,6 +1843,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
   Timer? _workoutTicker;
   Timer? _draftSaveDebounce;
   RestTimerState? _restTimer;
+  int _betweenExercisesSeconds = 180;
   int _elapsedSeconds = 0;
   double _totalVolume = 0;
   bool _workoutClosed = false;
@@ -1893,6 +1894,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         .where((set) => set.completed)
         .fold(0, (total, set) => total + (set.kg * set.reps));
     _loadPreviousHistory();
+    _loadBetweenExercisesSeconds();
     if (widget.isEditing) return;
     final startedAt = widget.resumeStartedAt ?? DateTime.now();
     _startedAt = startedAt;
@@ -2185,14 +2187,35 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     _syncActiveWorkout();
   }
 
-  void _startRestTimer(int seconds) {
+  Future<void> _loadBetweenExercisesSeconds() async {
+    try {
+      final seconds = await _workoutApi.getBetweenExercisesSeconds();
+      if (mounted) setState(() => _betweenExercisesSeconds = seconds);
+    } catch (_) {
+      // Se conserva el descanso predeterminado si no hay conexión.
+    }
+  }
+
+  Future<void> _saveBetweenExercisesSeconds(int seconds) async {
+    await _workoutApi.saveBetweenExercisesSeconds(seconds);
+    if (mounted) setState(() => _betweenExercisesSeconds = seconds);
+  }
+
+  void _startRestTimer(
+    String exerciseName,
+    int setSeconds,
+    bool exerciseCompleted,
+  ) {
     if (widget.isEditing) return;
+    final seconds = exerciseCompleted ? _betweenExercisesSeconds : setSeconds;
     _updateRestTimer(
       seconds <= 0
           ? null
           : RestTimerState(
               endsAt: DateTime.now().add(Duration(seconds: seconds)),
               totalSeconds: seconds,
+              betweenExercises: exerciseCompleted,
+              exerciseName: exerciseName,
             ),
     );
   }
@@ -2358,10 +2381,25 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                           ),
                           onReorder: _reorderExercises,
                           onSetsChanged: (sets) {
-                            _workoutResults[_exerciseOrder[index]] = sets;
+                            final name = _exerciseOrder[index];
+                            _workoutResults[name] = sets;
+                            if (_restTimer?.betweenExercises == true &&
+                                _restTimer?.exerciseName == name &&
+                                (sets.isEmpty ||
+                                    !sets.every((set) => set.completed))) {
+                              setState(() => _restTimer = null);
+                            }
                             _syncActiveWorkout();
                           },
-                          onSetCompleted: _startRestTimer,
+                          onSetCompleted: (seconds, completed) =>
+                              _startRestTimer(
+                                _exerciseOrder[index],
+                                seconds,
+                                completed,
+                              ),
+                          betweenExercisesSeconds: _betweenExercisesSeconds,
+                          onBetweenExercisesChanged:
+                              _saveBetweenExercisesSeconds,
                           onVolumeChanged: _updateVolume,
                           sets: _exerciseSets[_exerciseOrder[index]]!,
                         ),
@@ -2409,6 +2447,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
           : _ActiveRestTimer(
               remainingSeconds: remainingSeconds,
               totalSeconds: _restTimer!.totalSeconds,
+              betweenExercises: _restTimer!.betweenExercises,
               onDecrease: () => _adjustTimer(-15),
               onIncrease: () => _adjustTimer(15),
             ),
@@ -3320,6 +3359,8 @@ class _ExerciseCard extends StatefulWidget {
     required this.onSetsChanged,
     required this.onSetCompleted,
     required this.onVolumeChanged,
+    required this.betweenExercisesSeconds,
+    required this.onBetweenExercisesChanged,
   });
 
   final String name;
@@ -3328,7 +3369,9 @@ class _ExerciseCard extends StatefulWidget {
   final ValueChanged<String> onReplace;
   final VoidCallback onReorder;
   final ValueChanged<List<WorkoutSetPayload>> onSetsChanged;
-  final ValueChanged<int> onSetCompleted;
+  final void Function(int seconds, bool exerciseCompleted) onSetCompleted;
+  final int betweenExercisesSeconds;
+  final Future<void> Function(int) onBetweenExercisesChanged;
   final ValueChanged<double> onVolumeChanged;
 
   @override
@@ -3533,27 +3576,41 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   }
 
   Future<void> _openRestTimer() async {
-    final seconds = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: _card,
-      barrierColor: Colors.black.withValues(alpha: 0.72),
-      showDragHandle: true,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) => _RestTimerSheet(
-        exerciseName: widget.name,
-        initialSeconds: _restSeconds,
-      ),
-    );
-    if (seconds != null && mounted) {
-      setState(() => _restSeconds = seconds);
-      try {
-        await _workoutApi.saveRestTimerSeconds(
-          exerciseName: widget.name,
-          restSeconds: seconds,
+    final selection =
+        await showModalBottomSheet<
+          ({int setSeconds, int betweenExercisesSeconds, bool betweenExercises})
+        >(
+          context: context,
+          backgroundColor: _card,
+          barrierColor: Colors.black.withValues(alpha: 0.72),
+          showDragHandle: true,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          builder: (_) => _RestTimerSheet(
+            exerciseName: widget.name,
+            initialSeconds: _restSeconds,
+            betweenExercisesSeconds: widget.betweenExercisesSeconds,
+          ),
         );
+    if (selection != null && mounted) {
+      try {
+        if (selection.setSeconds != _restSeconds ||
+            !selection.betweenExercises) {
+          await _workoutApi.saveRestTimerSeconds(
+            exerciseName: widget.name,
+            restSeconds: selection.setSeconds,
+          );
+          if (mounted) setState(() => _restSeconds = selection.setSeconds);
+        }
+        if (selection.betweenExercisesSeconds !=
+                widget.betweenExercisesSeconds ||
+            selection.betweenExercises) {
+          await widget.onBetweenExercisesChanged(
+            selection.betweenExercisesSeconds,
+          );
+        }
       } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3648,7 +3705,13 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               onPersonalRecordChanged: (isRecord) =>
                   _updatePersonalRecordCandidate(index, isRecord),
               onRemoved: () => _removeSet(index),
-              onCompleted: () => widget.onSetCompleted(_restSeconds),
+              // Completion is reported before this row publishes its new payload.
+              onCompleted: () => widget.onSetCompleted(
+                _restSeconds,
+                _results.asMap().entries.every(
+                  (entry) => entry.key == index || entry.value.completed,
+                ),
+              ),
               onVolumeChanged: widget.onVolumeChanged,
             ),
           const SizedBox(height: 10),
@@ -4099,10 +4162,12 @@ class _RestTimerSheet extends StatefulWidget {
   const _RestTimerSheet({
     required this.exerciseName,
     required this.initialSeconds,
+    required this.betweenExercisesSeconds,
   });
 
   final String exerciseName;
   final int initialSeconds;
+  final int betweenExercisesSeconds;
 
   @override
   State<_RestTimerSheet> createState() => _RestTimerSheetState();
@@ -4112,19 +4177,24 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
   static const _minimumSeconds = 60;
   static const _stepSeconds = 30;
   static const _optionCount = 9;
-  late int _selectedIndex =
-      ((widget.initialSeconds - _minimumSeconds) / _stepSeconds).round().clamp(
-        0,
-        _optionCount - 1,
-      );
-  late final _scrollController = FixedExtentScrollController(
-    initialItem: _selectedIndex,
+  bool _betweenExercises = false;
+  int _indexFor(int seconds) => ((seconds - _minimumSeconds) / _stepSeconds)
+      .round()
+      .clamp(0, _optionCount - 1);
+  late int _setIndex = _indexFor(widget.initialSeconds);
+  late int _exerciseIndex = _indexFor(widget.betweenExercisesSeconds);
+  late final _setController = FixedExtentScrollController(
+    initialItem: _setIndex,
   );
-  int get _selectedSeconds => _minimumSeconds + _selectedIndex * _stepSeconds;
+  late final _exerciseController = FixedExtentScrollController(
+    initialItem: _exerciseIndex,
+  );
+  int get _selectedIndex => _betweenExercises ? _exerciseIndex : _setIndex;
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _setController.dispose();
+    _exerciseController.dispose();
     super.dispose();
   }
 
@@ -4143,21 +4213,51 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
             ),
             const SizedBox(height: 5),
             Text(
-              widget.exerciseName,
+              _betweenExercises
+                  ? 'Para todos tus ejercicios'
+                  : widget.exerciseName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: _muted, fontSize: 15),
             ),
             const SizedBox(height: 18),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('Entre series'),
+                  enabled: true,
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Entre ejercicios'),
+                  enabled: true,
+                ),
+              ],
+              selected: {_betweenExercises},
+              onSelectionChanged: (selection) =>
+                  setState(() => _betweenExercises = selection.single),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               height: 210,
               child: ListWheelScrollView.useDelegate(
-                controller: _scrollController,
+                key: ValueKey(_betweenExercises),
+                controller: _betweenExercises
+                    ? _exerciseController
+                    : _setController,
                 itemExtent: 48,
                 diameterRatio: 1.6,
                 physics: const FixedExtentScrollPhysics(),
                 onSelectedItemChanged: (index) {
-                  setState(() => _selectedIndex = index);
+                  setState(() {
+                    if (_betweenExercises) {
+                      _exerciseIndex = index;
+                    } else {
+                      _setIndex = index;
+                    }
+                  });
                 },
                 childDelegate: ListWheelChildBuilderDelegate(
                   childCount: _optionCount,
@@ -4190,7 +4290,12 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
               width: double.infinity,
               height: 43,
               child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(_selectedSeconds),
+                onPressed: () => Navigator.of(context).pop((
+                  setSeconds: _minimumSeconds + _setIndex * _stepSeconds,
+                  betweenExercisesSeconds:
+                      _minimumSeconds + _exerciseIndex * _stepSeconds,
+                  betweenExercises: _betweenExercises,
+                )),
                 style: FilledButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
@@ -4568,10 +4673,12 @@ class _ActiveRestTimer extends StatelessWidget {
     required this.totalSeconds,
     required this.onDecrease,
     required this.onIncrease,
+    required this.betweenExercises,
   });
 
   final int remainingSeconds;
   final int totalSeconds;
+  final bool betweenExercises;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
 
@@ -4605,14 +4712,25 @@ class _ActiveRestTimer extends StatelessWidget {
                   children: [
                     _TimerAdjustButton(label: '-15', onTap: onDecrease),
                     Expanded(
-                      child: Text(
-                        _formattedTime,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 29,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            betweenExercises
+                                ? 'Entre ejercicios'
+                                : 'Entre series',
+                            style: const TextStyle(color: _muted, fontSize: 12),
+                          ),
+                          Text(
+                            _formattedTime,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 29,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     _TimerAdjustButton(label: '+15', onTap: onIncrease),
