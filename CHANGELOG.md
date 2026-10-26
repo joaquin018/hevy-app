@@ -5,6 +5,18 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v33] — 2026-10-26
+
+Corregir el icono de «Comparación de resultados».
+
+- Usar el icono de ajustes deslizantes de Lucide en el menú de la rutina.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 4 pruebas de comparación por rutina, análisis estático y compilación
+web correctos. Comprobada la inclusión del icono en la fuente web compilada.
+
+[Cambios desde v32](https://github.com/joaquin018/hevy-app/compare/v32...v33).
+
 ## [v32] — 2026-10-26
 
 Aislar los resultados y récords de una rutina de forma opcional.

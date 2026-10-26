@@ -1402,7 +1402,7 @@ class _ItemManagementSheet extends StatelessWidget {
             children: [
               if (canConfigureResults)
                 _ExerciseOption(
-                  icon: Icons.tune,
+                  icon: LucideIcons.slidersHorizontal,
                   label: 'Comparación de resultados',
                   onTap: () =>
                       Navigator.of(context).pop(_ItemManagementAction.results),
