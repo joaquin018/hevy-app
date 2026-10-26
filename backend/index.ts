@@ -7,6 +7,7 @@ import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, vali
 import { migrateAuth } from './auth-migration.ts';
 import { RoutineError, RoutineLibrary } from './routine-library.ts';
 import { publishExercises } from './exercise-catalog.ts';
+import { lockWorkoutWrites, rebuildExerciseRecords } from './workout-records.ts';
 
 import {
   activeWorkoutDrafts,
@@ -94,6 +95,22 @@ app.get('/workout-draft', async ({ set, userId }) => {
   }
   return draft;
 });
+
+app.delete('/workout-sessions/:id', async ({ params, userId }) => {
+  return db.transaction(async (tx) => {
+    await lockWorkoutWrites(tx, userId);
+    const [session] = await tx.select({ id: workoutSessions.id }).from(workoutSessions)
+      .where(and(eq(workoutSessions.id, params.id), eq(workoutSessions.userId, userId)));
+    if (!session) throw new RoutineError(404, 'WORKOUT_NOT_FOUND', 'No se encontró el entrenamiento.');
+    const affected = await tx.select({ exerciseId: workoutSessionExercises.exerciseId }).from(workoutSessionExercises)
+      .where(eq(workoutSessionExercises.sessionId, session.id));
+    // Foreign keys remove only this session's exercises and sets. The private
+    // exercise settings and the global catalog remain available for reuse.
+    await tx.delete(workoutSessions).where(and(eq(workoutSessions.id, session.id), eq(workoutSessions.userId, userId)));
+    await rebuildExerciseRecords(tx, userId, [...new Set(affected.map(row => row.exerciseId))]);
+    return { deleted: true };
+  });
+}, { params: t.Object({ id: t.String({ format: 'uuid' }) }) });
 
 app.put(
   '/workout-draft',
@@ -301,8 +318,7 @@ app.post(
   async ({ body, set, userId }) => {
     const created = await db.transaction(async (tx) => {
 
-      // Retrying after a lost HTTP response must not duplicate a workout.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${new Date(body.startedAt).toISOString()}))`);
+      await lockWorkoutWrites(tx, userId);
       const [existing] = await tx.select().from(workoutSessions).where(and(
         eq(workoutSessions.userId, userId), eq(workoutSessions.startedAt, new Date(body.startedAt)),
       )).limit(1);
@@ -316,6 +332,8 @@ app.post(
           startedAt: new Date(body.startedAt),
           completedAt: new Date(body.completedAt),
           durationSeconds: body.durationSeconds,
+          // Stamp after acquiring the lock so replay follows the save order.
+          createdAt: sql`clock_timestamp()`,
         })
         .returning();
 

@@ -106,6 +106,18 @@ class WorkoutApi {
 
   String get _baseUrl => apiBaseUrl;
 
+  Future<void> deleteSession(String id) async {
+    final response = await _client.delete(
+      Uri.parse('$_baseUrl/workout-sessions/${Uri.encodeComponent(id)}'),
+    );
+    // Another device may already have removed this session.
+    if (response.statusCode != 200 && response.statusCode != 404) {
+      throw Exception(
+        'No se pudo eliminar el entrenamiento (${response.statusCode})',
+      );
+    }
+  }
+
   Future<void> saveSession({
     required String routineName,
     required DateTime startedAt,

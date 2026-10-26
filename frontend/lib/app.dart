@@ -571,6 +571,9 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
                                 ? (offset) =>
                                       _workoutApi.getHistory(offset: offset)
                                 : null,
+                            deleteSession: widget.enableCloudPersistence
+                                ? _workoutApi.deleteSession
+                                : null,
                           ),
                         ),
                       );

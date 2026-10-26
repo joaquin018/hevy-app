@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'workout_history_models.dart';
 
 const _muted = Color(0xFF9399A6);
@@ -55,8 +56,9 @@ String _relative(DateTime date) {
 }
 
 class WorkoutHistoryScreen extends StatefulWidget {
-  const WorkoutHistoryScreen({super.key, this.loadHistory});
+  const WorkoutHistoryScreen({super.key, this.loadHistory, this.deleteSession});
   final Future<WorkoutHistoryPage> Function(int offset)? loadHistory;
+  final Future<void> Function(String id)? deleteSession;
 
   @override
   State<WorkoutHistoryScreen> createState() => _WorkoutHistoryScreenState();
@@ -69,6 +71,8 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
   bool _hasMore = false;
   bool _retryRefresh = true;
   int _total = 0;
+  String? _deletingId;
+  bool get _busy => _loading || _deletingId != null;
 
   @override
   void initState() {
@@ -77,7 +81,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
   }
 
   Future<void> _load({bool refresh = false}) async {
-    if (_loading) return;
+    if (_busy) return;
     _retryRefresh = refresh;
     setState(() {
       _loading = true;
@@ -101,6 +105,63 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
     }
   }
 
+  Future<void> _confirmDelete(WorkoutHistorySession session) async {
+    final deleteSession = widget.deleteSession;
+    if (_busy || deleteSession == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar entrenamiento'),
+        content: Text(
+          '¿Quieres eliminar «${session.name}» del ${_date(session.startedAt)}?\n\n'
+          'Se eliminarán sus series y se actualizarán tus récords. Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const ValueKey('confirmar-eliminar-entrenamiento'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF5C68),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || _busy) return;
+    setState(() => _deletingId = session.id);
+    try {
+      await deleteSession(session.id);
+      if (!mounted) return;
+      setState(() {
+        _sessions.removeWhere((item) => item.id == session.id);
+        if (_total > 0) _total--;
+        _hasMore = _sessions.length < _total;
+        _deletingId = null;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Entrenamiento eliminado.')));
+      // Reload from the first page: deleting shifts offsets and can change
+      // the record badges of other sessions that are already visible.
+      await _load(refresh: true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _deletingId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo eliminar el entrenamiento. Inténtalo de nuevo.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,7 +170,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
         actions: [
           IconButton(
             tooltip: 'Actualizar historial',
-            onPressed: _loading ? null : () => _load(refresh: true),
+            onPressed: _busy ? null : () => _load(refresh: true),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -164,6 +225,11 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                 child: _HistoryCard(
                   key: ValueKey(session.id),
                   session: session,
+                  onDelete: widget.deleteSession == null
+                      ? null
+                      : () => _confirmDelete(session),
+                  deleting: _deletingId == session.id,
+                  busy: _busy,
                 ),
               ),
             if (_failed) ...[
@@ -186,7 +252,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
               ),
             if (_hasMore && !_loading && !_failed)
               OutlinedButton(
-                onPressed: _load,
+                onPressed: _busy ? null : _load,
                 child: const Text('Ver entrenamientos anteriores'),
               ),
           ],
@@ -197,8 +263,17 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
 }
 
 class _HistoryCard extends StatefulWidget {
-  const _HistoryCard({super.key, required this.session});
+  const _HistoryCard({
+    super.key,
+    required this.session,
+    this.onDelete,
+    this.deleting = false,
+    this.busy = false,
+  });
   final WorkoutHistorySession session;
+  final VoidCallback? onDelete;
+  final bool deleting;
+  final bool busy;
   @override
   State<_HistoryCard> createState() => _HistoryCardState();
 }
@@ -254,6 +329,24 @@ class _HistoryCardState extends State<_HistoryCard> {
                   ],
                 ),
               ),
+              if (widget.onDelete != null)
+                if (widget.deleting)
+                  SizedBox(
+                    key: ValueKey('eliminando-entrenamiento-${session.id}'),
+                    width: 24,
+                    height: 24,
+                    child: const CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    key: ValueKey('eliminar-entrenamiento-${session.id}'),
+                    tooltip: 'Eliminar entrenamiento',
+                    onPressed: widget.busy ? null : widget.onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Color(0xFFFF5C68),
+                    ),
+                  ),
             ],
           ),
           const SizedBox(height: 18),

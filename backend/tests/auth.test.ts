@@ -98,6 +98,7 @@ describe('Authentication and private accounts', () => {
     for (const [path, method, body] of [
       ['/auth/me', 'GET'], ['/exercises', 'GET'], ['/routine-folders', 'GET'],
       ['/workout-sessions', 'GET'], ['/workout-draft', 'GET'], ['/workout-draft', 'DELETE'],
+      [`/workout-sessions/${randomUUID()}`, 'DELETE'],
       ['/exercises/rest-timer?name=Press', 'GET'], ['/exercises/previous?name=Press', 'GET'],
       ['/exercises', 'POST', { name: 'Press', muscleGroup: 'Pecho' }],
       ['/exercises/rest-timer', 'PUT', { name: 'Press', restSeconds: 120 }],

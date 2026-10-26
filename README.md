@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v27**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v28**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `28`
+Para publicar otra versión después de terminar los cambios (sustituye `29`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 28
-# Añade una sección ## [v28] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v28
+bun scripts/version.mjs prepare 29
+# Añade una sección ## [v29] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v29
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v28'
-git tag -a v28 -m 'v28: descripción de los cambios'
-git push --atomic origin master v28
-bun scripts/version.mjs notes v28 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v28 --verify-tag --title 'v28 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v29'
+git tag -a v29 -m 'v29: descripción de los cambios'
+git push --atomic origin master v29
+bun scripts/version.mjs notes v29 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v29 --verify-tag --title 'v29 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -145,6 +145,17 @@ El botón Historial de la cabecera de Rutinas abre las sesiones, de la más
 reciente a la más antigua, con fecha y hora local, duración, volumen y récords.
 Cada tarjeta permite mostrar todos los ejercicios y desplegar pesos,
 repeticiones y tipo de serie. Se puede actualizar deslizando hacia abajo.
+
+La papelera de cada tarjeta permite eliminar un entrenamiento tras confirmar
+su nombre y fecha. Se borran la sesión y sus series, y se reconstruyen los
+récords y los valores de `Anterior` usando los entrenamientos restantes.
+El historial se recarga para actualizar el contador, los logros y la paginación.
+Si falla el borrado, la tarjeta permanece disponible para reintentar.
+
+`DELETE /workout-sessions/:id` requiere autenticación y solo elimina sesiones
+de la cuenta actual. El borrado y el recálculo se realizan en una transacción,
+coordinada con los guardados simultáneos. Las rutinas, los borradores, las
+preferencias de descanso y el catálogo de ejercicios se conservan.
 
 `GET /workout-sessions?offset=0&limit=20` devuelve `sessions`, `total` y
 `hasMore`. El volumen suma peso × repeticiones de las series completadas,

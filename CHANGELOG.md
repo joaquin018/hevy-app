@@ -5,6 +5,24 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v28] — 2026-10-26
+
+Eliminar entrenamientos desde el historial.
+
+- Añadir una papelera en cada sesión con confirmación de su nombre y fecha antes de borrarla.
+- Eliminar la sesión y sus series, y recalcular los récords y los valores de `Anterior` con los entrenamientos restantes.
+- Actualizar el contador, los logros y la paginación después del borrado, con avisos de error y posibilidad de reintentar.
+- Restringir el borrado a la cuenta propietaria y coordinarlo con los guardados simultáneos en una transacción.
+- Conservar rutinas, borradores, preferencias de descanso y catálogo de ejercicios.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 45 pruebas del backend y 43 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Verificados los permisos, el
+recálculo de referencias, los cambios concurrentes y la reversión ante errores
+en una base desechable; cancelación, reintentos y paginación probados en la interfaz.
+
+[Cambios desde v27](https://github.com/joaquin018/hevy-app/compare/v27...v28).
+
 ## [v27] — 2026-10-24
 
 Simplificar la cabecera del historial.
