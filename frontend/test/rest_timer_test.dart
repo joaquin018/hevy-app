@@ -135,15 +135,15 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('checkbox-1')));
         await tester.pump();
         const options = [
-          ('1 min', 60, '01:00'),
-          ('1 min 30s', 90, '01:30'),
-          ('2 min', 120, '02:00'),
-          ('2 min 30s', 150, '02:30'),
-          ('3 min', 180, '03:00'),
-          ('3 min 30s', 210, '03:30'),
-          ('4 min', 240, '04:00'),
-          ('4 min 30s', 270, '04:30'),
-          ('5 min', 300, '05:00'),
+          ('1:00 min', 60, '01:00'),
+          ('1:30 min', 90, '01:30'),
+          ('2:00 min', 120, '02:00'),
+          ('2:30 min', 150, '02:30'),
+          ('3:00 min', 180, '03:00'),
+          ('3:30 min', 210, '03:30'),
+          ('4:00 min', 240, '04:00'),
+          ('4:30 min', 270, '04:30'),
+          ('5:00 min', 300, '05:00'),
         ];
         for (var index = 0; index < options.length; index++) {
           final (label, seconds, countdown) = options[index];
@@ -155,7 +155,7 @@ void main() {
           (wheel.controller! as FixedExtentScrollController).jumpToItem(index);
           await tester.pumpAndSettle();
           expect(tester.widget<Text>(find.text(label)).style!.fontSize, 20);
-          expect(find.text('5 min 30s'), findsNothing);
+          expect(find.text('5:30 min'), findsNothing);
           await tester.tap(find.text('Listo'));
           await tester.pumpAndSettle();
           expect(savedDurations.last, seconds);
@@ -180,7 +180,7 @@ void main() {
         expect(find.text('01:30'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('temporizador-Press')));
         await tester.pumpAndSettle();
-        expect(tester.widget<Text>(find.text('1 min 30s')).style!.fontSize, 20);
+        expect(tester.widget<Text>(find.text('1:30 min')).style!.fontSize, 20);
         await tester.tap(find.text('Listo'));
         await tester.pumpAndSettle();
         expect(savedDurations, [90]);

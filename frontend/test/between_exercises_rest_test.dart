@@ -197,7 +197,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Entre ejercicios').last);
         await tester.pumpAndSettle();
-        expect(tester.widget<Text>(find.text('3 min')).style!.fontSize, 20);
+        expect(tester.widget<Text>(find.text('3:00 min')).style!.fontSize, 20);
         expect(find.text('Rutina: Empuje'), findsNothing);
         final wheel = tester.widget<ListWheelScrollView>(
           find.byType(ListWheelScrollView),

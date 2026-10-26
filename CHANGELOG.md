@@ -5,6 +5,17 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v37] — 2026-10-26
+
+Mostrar las opciones de descanso con el formato minutos:segundos.
+
+- Usar las etiquetas `1:00 min`, `1:30 min`, `2:00 min`, etc., hasta `5:00 min`, en los selectores «Entre series» y «Entre ejercicios».
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 14 pruebas de temporizadores y análisis estático correctos.
+
+[Cambios desde v36](https://github.com/joaquin018/hevy-app/compare/v36...v37).
+
 ## [v36] — 2026-10-26
 
 Guardar los dos descansos de forma independiente por ejercicio.

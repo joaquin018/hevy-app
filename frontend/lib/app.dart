@@ -4272,6 +4272,10 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
                   builder: (context, index) {
                     final seconds = _minimumSeconds + index * _stepSeconds;
                     final minutes = seconds ~/ 60;
+                    final secondsLabel = (seconds % 60).toString().padLeft(
+                      2,
+                      '0',
+                    );
                     final selected = index == _selectedIndex;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
@@ -4282,7 +4286,7 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child: Text(
-                        '$minutes min${seconds % 60 == 0 ? '' : ' 30s'}',
+                        '$minutes:$secondsLabel min',
                         style: TextStyle(
                           color: selected ? Colors.white : _muted,
                           fontSize: selected ? 20 : 17,
