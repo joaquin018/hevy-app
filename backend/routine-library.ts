@@ -2,9 +2,10 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'node:crypto';
 import type { Database } from './auth.ts';
-import { exercises, routineExercises, routineFolders, routines, routineShares, users } from './schema.ts';
+import { activeWorkoutDrafts, exercises, routineExercises, routineFolders, routines, routineShares, users, workoutSessionExercises, workoutSessions } from './schema.ts';
 import type { RoutineSnapshot, FolderSnapshot } from './schema.ts';
 import { publishExercises } from './exercise-catalog.ts';
+import { lockWorkoutWrites, rebuildExerciseRecords } from './workout-records.ts';
 
 export class RoutineError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -16,7 +17,7 @@ export type LibraryPatch = {
   version: number;
   folders: { id: string; name: string; position: number }[];
   deletedFolders: string[];
-  routines: { id: string; folderId: string; name: string; position: number; exercises?: string[] }[];
+  routines: { id: string; folderId: string; name: string; position: number; exercises?: string[]; isolateResults?: boolean }[];
   deletedRoutines: string[];
 };
 
@@ -66,12 +67,12 @@ export class RoutineLibrary {
       const [owner] = await tx.select({ version: users.routineVersion }).from(users).where(eq(users.id, userId));
       const rows = await tx.select({
         folderId: routineFolders.id, folderName: routineFolders.name,
-        routineId: routines.id, routineName: routines.name, exerciseName: routineExercises.name,
+        routineId: routines.id, routineName: routines.name, isolateResults: routines.isolateResults, exerciseName: routineExercises.name,
       }).from(routineFolders).leftJoin(routines, eq(routines.folderId, routineFolders.id))
         .leftJoin(routineExercises, eq(routineExercises.routineId, routines.id))
         .where(eq(routineFolders.userId, userId))
         .orderBy(asc(routineFolders.position), asc(routineFolders.id), asc(routines.position), asc(routines.id), asc(routineExercises.position));
-      type Routine = { id: string; name: string; exercises: string[] };
+      type Routine = { id: string; name: string; exercises: string[]; isolateResults?: boolean };
       const folders = new Map<string, { id: string; name: string; routines: Routine[] }>();
       const byRoutine = new Map<string, Routine>();
       for (const row of rows) {
@@ -79,7 +80,7 @@ export class RoutineLibrary {
         if (!folder) { folder = { id: row.folderId, name: row.folderName, routines: [] }; folders.set(row.folderId, folder); }
         if (row.routineId) {
           let routine = byRoutine.get(row.routineId);
-          if (!routine) { routine = { id: row.routineId, name: row.routineName!, exercises: [] }; byRoutine.set(row.routineId, routine); folder.routines.push(routine); }
+          if (!routine) { routine = { id: row.routineId, name: row.routineName!, exercises: [], ...(row.isolateResults ? { isolateResults: true } : {}) }; byRoutine.set(row.routineId, routine); folder.routines.push(routine); }
           if (row.exerciseName !== null) routine.exercises.push(row.exerciseName);
         }
       }
@@ -91,6 +92,7 @@ export class RoutineLibrary {
     unique([...patch.folders.map(f => f.id), ...patch.deletedFolders]);
     unique([...patch.routines.map(r => r.id), ...patch.deletedRoutines]);
     return this.db.transaction(async (tx) => {
+      await lockWorkoutWrites(tx, userId);
       const version = await lockLibrary(tx, userId);
       if (version !== patch.version) fail(409, 'LIBRARY_CHANGED', 'Tus rutinas cambiaron en otra pestaña. Se actualizará la lista; vuelve a realizar el cambio.');
       const folderIds = [...new Set([...patch.folders.map(f => f.id), ...patch.deletedFolders, ...patch.routines.map(r => r.folderId)])];
@@ -100,7 +102,7 @@ export class RoutineLibrary {
       for (const id of patch.deletedFolders) if (!folders.has(id)) fail(404, 'NOT_FOUND', 'Carpeta no encontrada.');
       const routineIds = [...patch.routines.map(r => r.id), ...patch.deletedRoutines];
       const existingRoutines = routineIds.length ? await tx.select({
-        id: routines.id, folderId: routines.folderId, name: routines.name, position: routines.position, ownerId: routineFolders.userId,
+        id: routines.id, folderId: routines.folderId, name: routines.name, position: routines.position, isolateResults: routines.isolateResults, ownerId: routineFolders.userId,
       }).from(routines).innerJoin(routineFolders, eq(routines.folderId, routineFolders.id)).where(inArray(routines.id, routineIds)) : [];
       if (existingRoutines.some(r => r.ownerId !== userId)) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
       const savedRoutines = new Map(existingRoutines.map(r => [r.id, r]));
@@ -120,9 +122,24 @@ export class RoutineLibrary {
       }
       for (const input of patch.routines) {
         const name = cleanName(input.name), existing = savedRoutines.get(input.id);
-        if (!existing) await tx.insert(routines).values({ id: input.id, folderId: input.folderId, name, position: input.position });
-        else if (existing.name !== name || existing.position !== input.position || existing.folderId !== input.folderId) {
-          await tx.update(routines).set({ name, position: input.position, folderId: input.folderId }).where(eq(routines.id, input.id));
+        const isolateResults = input.isolateResults ?? existing?.isolateResults ?? false;
+        const scopeChanged = existing !== undefined && existing.isolateResults !== isolateResults;
+        if (scopeChanged) {
+          const [draft] = await tx.select({ userId: activeWorkoutDrafts.userId }).from(activeWorkoutDrafts)
+            .where(and(eq(activeWorkoutDrafts.userId, userId), eq(activeWorkoutDrafts.routineId, input.id)));
+          if (draft) fail(409, 'WORKOUT_IN_PROGRESS', 'Termina o descarta el entrenamiento en curso antes de cambiar el aislamiento.');
+        }
+        if (!existing) await tx.insert(routines).values({ id: input.id, folderId: input.folderId, name, position: input.position, isolateResults });
+        else if (existing.name !== name || existing.position !== input.position || existing.folderId !== input.folderId || scopeChanged) {
+          await tx.update(routines).set({ name, position: input.position, folderId: input.folderId, isolateResults }).where(eq(routines.id, input.id));
+        }
+        if (scopeChanged) {
+          const affected = await tx.select({ exerciseId: workoutSessionExercises.exerciseId }).from(workoutSessionExercises)
+            .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSessionExercises.sessionId))
+            .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.routineId, input.id)));
+          await tx.update(workoutSessions).set({ isolateResults })
+            .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.routineId, input.id)));
+          await rebuildExerciseRecords(tx, userId, [...new Set(affected.map(row => row.exerciseId))]);
         }
         if (input.exercises !== undefined) {
           const names = input.exercises.map(cleanName);

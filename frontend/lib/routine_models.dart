@@ -16,14 +16,17 @@ class RoutinePayload {
     required this.id,
     required this.name,
     required this.exercises,
+    this.isolateResults = false,
   });
   final String id;
   final String name;
   final List<String> exercises;
+  final bool isolateResults;
   factory RoutinePayload.fromJson(Map<String, dynamic> json) => RoutinePayload(
     id: json['id'] as String,
     name: json['name'] as String,
     exercises: List<String>.from(json['exercises'] as List),
+    isolateResults: json['isolateResults'] as bool? ?? false,
   );
 }
 
@@ -87,17 +90,21 @@ class RoutineLibraryPayload {
         final exercisesChanged =
             oldRoutine == null ||
             !listEquals(oldRoutine.exercises, r.exercises);
+        final isolationChanged =
+            (oldRoutine?.isolateResults ?? false) != r.isolateResults;
         if (previous == null ||
             oldRoutine!.name != r.name ||
             previous['folderId'] != f.id ||
             previous['position'] != ri ||
-            exercisesChanged) {
+            exercisesChanged ||
+            isolationChanged) {
           routineChanges.add({
             'id': r.id,
             'folderId': f.id,
             'name': r.name,
             'position': ri,
             if (exercisesChanged) 'exercises': r.exercises,
+            if (isolationChanged) 'isolateResults': r.isolateResults,
           });
         }
       }

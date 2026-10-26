@@ -29,9 +29,11 @@ class _ActiveWorkout {
     required this.firstExercise,
     required this.results,
     this.restTimer,
+    this.routineId,
   });
 
   final String routineName;
+  final String? routineId;
   final DateTime startedAt;
   final List<String> exercises;
   final List<String> originalExercises;
@@ -157,10 +159,15 @@ class WorkoutHomePage extends StatefulWidget {
 }
 
 class _RoutineData {
-  _RoutineData(this.name, this.exercises, {String? id})
-    : id = id ?? newRoutineId();
+  _RoutineData(
+    this.name,
+    this.exercises, {
+    String? id,
+    this.isolateResults = false,
+  }) : id = id ?? newRoutineId();
 
   final String id;
+  final bool isolateResults;
 
   final String name;
   final List<String> exercises;
@@ -219,6 +226,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
       };
       _activeWorkout.value = _ActiveWorkout(
         routineName: draft.routineName,
+        routineId: draft.routineId,
         startedAt: draft.startedAt,
         exercises: draft.exercises.map((exercise) => exercise.name).toList(),
         originalExercises: draft.originalExercises,
@@ -296,6 +304,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
                         routine.name,
                         List.of(routine.exercises),
                         id: routine.id,
+                        isolateResults: routine.isolateResults,
                       ),
                     )
                     .toList(),
@@ -330,6 +339,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
                 id: routine.id,
                 name: routine.name,
                 exercises: List.of(routine.exercises),
+                isolateResults: routine.isolateResults,
               ),
           ],
         ),
@@ -751,6 +761,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
             builder: (_) => WorkoutPage(
               initialExercises: exercises,
               routineName: routineName,
+              routineId: routineId,
               resumeStartedAt: resumeStartedAt,
               originalExercises: originalExercises,
               initialResults: initialResults,
@@ -765,9 +776,10 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
           if (index < 0) return;
           setState(() {
             widget.routines[index] = _RoutineData(
-              routineName,
+              widget.routines[index].name,
               updatedExercises,
               id: widget.routines[index].id,
+              isolateResults: widget.routines[index].isolateResults,
             );
           });
           await widget.onChanged();
@@ -858,6 +870,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         exercises: active.exercises,
         originalExercises: active.originalExercises,
         routineName: active.routineName,
+        routineId: active.routineId,
         resumeStartedAt: active.startedAt,
         initialResults: active.results,
       );
@@ -960,6 +973,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         name,
         routine.exercises,
         id: routine.id,
+        isolateResults: routine.isolateResults,
       );
     });
     await widget.onChanged();
@@ -972,6 +986,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         exercises: active.exercises,
         originalExercises: active.originalExercises,
         routineName: active.routineName,
+        routineId: active.routineId,
         resumeStartedAt: active.startedAt,
         initialResults: active.results,
       );
@@ -984,6 +999,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
           initialExercises: routine.exercises,
           isEditing: true,
           routineName: routine.name,
+          routineId: routine.id,
         ),
       ),
     );
@@ -993,6 +1009,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
         routine.name,
         exercises,
         id: routine.id,
+        isolateResults: routine.isolateResults,
       );
     });
     await widget.onChanged();
@@ -1046,6 +1063,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
       ),
       builder: (_) => _ItemManagementSheet(
         itemType: 'rutina',
+        canConfigureResults: true,
         canReorder: true,
         canShare: widget.onShare != null,
       ),
@@ -1057,9 +1075,79 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
       await _renameRoutine(index);
     } else if (action == _ItemManagementAction.share) {
       await widget.onShare?.call(widget.routines[index]);
+    } else if (action == _ItemManagementAction.results) {
+      await _configureResults(index);
     } else {
       await _deleteRoutine(index);
     }
+  }
+
+  Future<void> _configureResults(int index) async {
+    final routine = widget.routines[index];
+    var isolated = routine.isolateResults;
+    final selection = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, updateDialog) => AlertDialog(
+          backgroundColor: const Color(0xFF171A22),
+          surfaceTintColor: Colors.transparent,
+          title: const Text('Comparación de resultados'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(routine.name, style: const TextStyle(color: _accent)),
+              SwitchListTile(
+                key: const ValueKey('aislar-resultados-rutina'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Aislar resultados'),
+                value: isolated,
+                onChanged: (value) => updateDialog(() => isolated = value),
+              ),
+              Text(
+                isolated
+                    ? 'Los valores anteriores y récords se compararán solo con esta rutina. Se usarán también sus entrenamientos anteriores que podamos identificar.'
+                    : 'Los valores anteriores y récords se comparten con las demás rutinas que no tengan el aislamiento activado.',
+                style: const TextStyle(color: _muted, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              key: const ValueKey('guardar-aislamiento-rutina'),
+              onPressed: () => Navigator.pop(context, isolated),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selection == null || selection == routine.isolateResults) {
+      return;
+    }
+    if (_activeWorkout.value?.routineId == routine.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Termina o descarta el entrenamiento en curso de esta rutina antes de cambiar su comparación.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      widget.routines[index] = _RoutineData(
+        routine.name,
+        routine.exercises,
+        id: routine.id,
+        isolateResults: selection,
+      );
+    });
+    await widget.onChanged();
   }
 
   Future<void> _reorderRoutines() async {
@@ -1112,6 +1200,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
                               return _RoutineCard(
                                 key: ValueKey(routine.id),
                                 day: routine.name,
+                                isolateResults: routine.isolateResults,
                                 exercises: routine.exercises,
                                 onOptions: () => _openRoutineOptions(index),
                                 onEdit: () => _editRoutine(index),
@@ -1136,6 +1225,7 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
                       initialExercises: activeWorkout.exercises,
                       originalExercises: activeWorkout.originalExercises,
                       routineName: activeWorkout.routineName,
+                      routineId: activeWorkout.routineId,
                       resumeStartedAt: activeWorkout.startedAt,
                       initialResults: activeWorkout.results,
                     ),
@@ -1284,18 +1374,20 @@ class _EmptyFolders extends StatelessWidget {
   }
 }
 
-enum _ItemManagementAction { reorder, rename, delete, share }
+enum _ItemManagementAction { reorder, rename, delete, share, results }
 
 class _ItemManagementSheet extends StatelessWidget {
   const _ItemManagementSheet({
     required this.itemType,
     this.canReorder = false,
     this.canShare = false,
+    this.canConfigureResults = false,
   });
 
   final String itemType;
   final bool canReorder;
   final bool canShare;
+  final bool canConfigureResults;
 
   @override
   Widget build(BuildContext context) {
@@ -1308,6 +1400,13 @@ class _ItemManagementSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (canConfigureResults)
+                _ExerciseOption(
+                  icon: Icons.tune,
+                  label: 'Comparación de resultados',
+                  onTap: () =>
+                      Navigator.of(context).pop(_ItemManagementAction.results),
+                ),
               if (canShare)
                 _ExerciseOption(
                   icon: Icons.send_outlined,
@@ -1430,9 +1529,11 @@ class _RoutineCard extends StatelessWidget {
     required this.onOptions,
     required this.onEdit,
     required this.onStart,
+    this.isolateResults = false,
   });
 
   final String day;
+  final bool isolateResults;
   final List<String> exercises;
   final VoidCallback onOptions;
   final VoidCallback onEdit;
@@ -1470,6 +1571,18 @@ class _RoutineCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (isolateResults)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 10),
+                          child: Tooltip(
+                            message: 'Resultados aislados',
+                            child: Icon(
+                              Icons.lock_outline,
+                              color: _accent,
+                              size: 18,
+                            ),
+                          ),
+                        ),
                       IconButton(
                         key: ValueKey('opciones-rutina-$day'),
                         onPressed: onOptions,
@@ -1708,6 +1821,7 @@ class WorkoutPage extends StatefulWidget {
     this.initialExercises = const ['Press Banca Inclinado Con Barra', 'Fondos'],
     this.isEditing = false,
     this.routineName,
+    this.routineId,
     this.resumeStartedAt,
     this.originalExercises,
     this.initialResults = const {},
@@ -1716,6 +1830,7 @@ class WorkoutPage extends StatefulWidget {
   final List<String> initialExercises;
   final bool isEditing;
   final String? routineName;
+  final String? routineId;
   final DateTime? resumeStartedAt;
   final List<String>? originalExercises;
   final Map<String, List<WorkoutSetPayload>> initialResults;
@@ -1789,6 +1904,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     }
     final activeWorkout = _ActiveWorkout(
       routineName: widget.routineName ?? 'Rutina',
+      routineId: widget.routineId,
       startedAt: startedAt,
       exercises: List.of(_exerciseOrder),
       originalExercises: List.of(_initialExerciseOrder),
@@ -1851,6 +1967,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
       await _workoutApi.saveWorkoutDraft(
         WorkoutDraftPayload(
           routineName: widget.routineName ?? 'Rutina',
+          routineId: widget.routineId,
           startedAt: _startedAt,
           originalExercises: List.of(_initialExerciseOrder),
           exercises: [
@@ -1894,7 +2011,10 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     await Future.wait(
       _exerciseOrder.map((exercise) async {
         try {
-          final previousSets = await _workoutApi.getPreviousSets(exercise);
+          final previousSets = await _workoutApi.getPreviousSets(
+            exercise,
+            routineId: widget.routineId,
+          );
           if (!mounted || previousSets.isEmpty) return;
           final currentSets = List<_SetData>.of(
             _exerciseSets[exercise] ?? const [],
@@ -2011,6 +2131,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     if (active == null) return;
     _activeWorkout.value = _ActiveWorkout(
       routineName: active.routineName,
+      routineId: active.routineId,
       startedAt: active.startedAt,
       exercises: List.of(_exerciseOrder),
       originalExercises: List.of(_initialExerciseOrder),
@@ -2127,6 +2248,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
       _draftSaveDebounce?.cancel();
       await _workoutApi.saveSession(
         routineName: widget.routineName ?? 'Rutina',
+        routineId: widget.routineId,
         startedAt: _startedAt,
         completedAt: DateTime.now(),
         durationSeconds: _elapsedSeconds,

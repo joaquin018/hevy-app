@@ -5,6 +5,27 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v32] — 2026-10-26
+
+Aislar los resultados y récords de una rutina de forma opcional.
+
+- Añadir «Comparación de resultados → Aislar resultados» al menú de cada rutina, desactivado por defecto, con un indicador en su tarjeta.
+- Usar las series completadas de esa rutina para sus valores anteriores y récords, incluidos los entrenamientos previos identificables y las series de calentamiento.
+- Guardar el identificador de la rutina en sesiones y borradores para conservar la separación al renombrarla, moverla o retomar el entrenamiento.
+- Asociar una sola vez el historial anterior por nombres únicos dentro de la cuenta; conservar sin asociar los nombres ambiguos o sin coincidencia.
+- Recalcular las referencias y los logros al cambiar la opción o eliminar una sesión, sin perder el historial ni mezclar rutinas aisladas con la comparación compartida.
+- Impedir cambios de comparación mientras haya un entrenamiento en curso de esa rutina y validar la propiedad de los identificadores en la API.
+- Mantener independientes las copias recibidas al compartir y añadir índices para consultar las series de la rutina.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 58 pruebas del backend y 47 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Verificados la migración desde
+v31, el historial anterior, los permisos, los cambios concurrentes, el borrado,
+las copias compartidas y la recuperación de borradores. Consulta de series
+mediante índice comprobada con 10.000 sesiones de otra cuenta.
+
+[Cambios desde v31](https://github.com/joaquin018/hevy-app/compare/v31...v32).
+
 ## [v31] — 2026-10-26
 
 Optimizar la compilación del frontend en Docker.

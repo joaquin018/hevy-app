@@ -7,7 +7,8 @@ import { authenticate, authRoutes, requestAuthorization, rejectCrossOrigin, vali
 import { migrateAuth } from './auth-migration.ts';
 import { RoutineError, RoutineLibrary } from './routine-library.ts';
 import { publishExercises } from './exercise-catalog.ts';
-import { lockWorkoutWrites, rebuildExerciseRecords } from './workout-records.ts';
+import { lockWorkoutWrites, readRoutineReferences, rebuildExerciseRecords } from './workout-records.ts';
+import { resolveRoutineContext } from './routine-results.ts';
 
 import {
   activeWorkoutDrafts,
@@ -116,11 +117,14 @@ app.put(
   '/workout-draft',
   async ({ body, userId }) => {
     await db.transaction(async (tx) => {
+      await lockWorkoutWrites(tx, userId);
+      const routine = await resolveRoutineContext(tx, userId, body);
       await tx
         .insert(activeWorkoutDrafts)
         .values({
           userId: userId,
           routineName: body.routineName,
+          ...routine,
           startedAt: new Date(body.startedAt),
           originalExercises: body.originalExercises,
           exercises: body.exercises,
@@ -130,6 +134,7 @@ app.put(
           target: activeWorkoutDrafts.userId,
           set: {
             routineName: body.routineName,
+            ...routine,
             startedAt: new Date(body.startedAt),
             originalExercises: body.originalExercises,
             exercises: body.exercises,
@@ -142,6 +147,7 @@ app.put(
   {
     body: t.Object({
       routineName: t.String({ minLength: 1, maxLength: 120 }),
+      routineId: t.Optional(t.String({ format: 'uuid' })),
       startedAt: t.String({ format: 'date-time' }),
       originalExercises: t.Array(t.String({ minLength: 1, maxLength: 160 })),
       exercises: t.Array(
@@ -287,6 +293,7 @@ app.patch('/routine-library', ({ userId, body }) => library.patch(userId, body),
     folders: t.Array(t.Object({ id: uuid(), name: t.String({ minLength: 1, maxLength: 120 }), position: position() }), { maxItems: 100 }),
     deletedFolders: t.Array(uuid(), { maxItems: 100 }),
     routines: t.Array(t.Object({ id: uuid(), folderId: uuid(), name: t.String({ minLength: 1, maxLength: 120 }), position: position(),
+      isolateResults: t.Optional(t.Boolean()),
       exercises: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 160 }), { maxItems: 100 })) }), { maxItems: 500 }),
     deletedRoutines: t.Array(uuid(), { maxItems: 500 }),
   }),
@@ -323,12 +330,14 @@ app.post(
         eq(workoutSessions.userId, userId), eq(workoutSessions.startedAt, new Date(body.startedAt)),
       )).limit(1);
       if (existing) return existing;
+      const routine = await resolveRoutineContext(tx, userId, body);
 
       const [session] = await tx
         .insert(workoutSessions)
         .values({
           userId: userId,
           routineName: body.routineName,
+          ...routine,
           startedAt: new Date(body.startedAt),
           completedAt: new Date(body.completedAt),
           durationSeconds: body.durationSeconds,
@@ -384,6 +393,7 @@ app.post(
           })),
         );
 
+        if (session.isolateResults) continue;
         for (const { workoutSet, position } of completedSets) {
           const [record] = await tx
             .select()
@@ -434,6 +444,7 @@ app.post(
   {
     body: t.Object({
       routineName: t.Optional(t.String({ maxLength: 120 })),
+      routineId: t.Optional(t.String({ format: 'uuid' })),
       startedAt: t.String({ format: 'date-time' }),
       completedAt: t.String({ format: 'date-time' }),
       durationSeconds: t.Integer({ minimum: 0 }),
@@ -463,42 +474,50 @@ app.post(
 app.get(
   '/exercises/previous',
   async ({ query, set, userId }) => {
-    const records = await db
-      .select({
-        position: exerciseRecords.position,
-        type: exerciseRecords.setType,
-        kg: exerciseRecords.weightKg,
-        reps: exerciseRecords.repetitions,
-        achievedAt: exerciseRecords.achievedAt,
-      })
-      .from(exerciseRecords)
-      .innerJoin(exercises, eq(exerciseRecords.exerciseId, exercises.id))
-      .where(
-        and(
-          eq(exercises.userId, userId),
-          eq(exercises.normalizedName, normalizeName(query.name)),
-        ),
-      )
-      .orderBy(asc(exerciseRecords.position));
+    return db.transaction(async (tx) => {
+      const routine = await resolveRoutineContext(tx, userId, { routineId: query.routineId });
+      const records = routine.isolateResults && routine.routineId
+        ? (await readRoutineReferences(tx, userId, routine.routineId, normalizeName(query.name))).map(row => ({
+            position: row.position, type: row.setType, kg: row.weightKg, reps: row.repetitions, achievedAt: row.achievedAt,
+          }))
+        : await tx
+        .select({
+          position: exerciseRecords.position,
+          type: exerciseRecords.setType,
+          kg: exerciseRecords.weightKg,
+          reps: exerciseRecords.repetitions,
+          achievedAt: exerciseRecords.achievedAt,
+        })
+        .from(exerciseRecords)
+        .innerJoin(exercises, eq(exerciseRecords.exerciseId, exercises.id))
+        .where(
+          and(
+            eq(exercises.userId, userId),
+            eq(exercises.normalizedName, normalizeName(query.name)),
+          ),
+        )
+        .orderBy(asc(exerciseRecords.position));
 
-    if (records.length === 0) {
-      set.status = 404;
-      return { message: 'Aún no hay un récord para este ejercicio' };
-    }
+      if (records.length === 0) {
+        set.status = 404;
+        return { message: 'Aún no hay un récord para este ejercicio' };
+      }
 
-    return {
-      completedAt: records[0].achievedAt,
-      sets: records.map((record) => ({
-        position: record.position,
-        type: record.type,
-        kg: Number(record.kg),
-        reps: record.reps,
-      })),
-    };
+      return {
+        completedAt: records[0].achievedAt,
+        sets: records.map((record) => ({
+          position: record.position,
+          type: record.type,
+          kg: Number(record.kg),
+          reps: record.reps,
+        })),
+      };
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   },
   {
     query: t.Object({
       name: t.String({ minLength: 1, maxLength: 160 }),
+      routineId: t.Optional(t.String({ format: 'uuid' })),
     }),
   },
 );

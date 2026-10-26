@@ -51,9 +51,11 @@ class WorkoutDraftPayload {
     required this.startedAt,
     required this.originalExercises,
     required this.exercises,
+    this.routineId,
   });
 
   final String routineName;
+  final String? routineId;
   final DateTime startedAt;
   final List<String> originalExercises;
   final List<WorkoutExercisePayload> exercises;
@@ -120,6 +122,7 @@ class WorkoutApi {
 
   Future<void> saveSession({
     required String routineName,
+    String? routineId,
     required DateTime startedAt,
     required DateTime completedAt,
     required int durationSeconds,
@@ -130,6 +133,7 @@ class WorkoutApi {
       headers: {'content-type': 'application/json'},
       body: jsonEncode({
         'routineName': routineName,
+        'routineId': ?routineId,
         'startedAt': startedAt.toUtc().toIso8601String(),
         'completedAt': completedAt.toUtc().toIso8601String(),
         'durationSeconds': durationSeconds,
@@ -150,6 +154,7 @@ class WorkoutApi {
     final value = jsonDecode(response.body) as Map<String, dynamic>;
     return WorkoutDraftPayload(
       routineName: value['routineName'] as String,
+      routineId: value['routineId'] as String?,
       startedAt: DateTime.parse(value['startedAt'] as String),
       originalExercises: List<String>.from(
         value['originalExercises'] as List<dynamic>,
@@ -180,6 +185,7 @@ class WorkoutApi {
       headers: {'content-type': 'application/json'},
       body: jsonEncode({
         'routineName': draft.routineName,
+        if (draft.routineId != null) 'routineId': draft.routineId,
         'startedAt': draft.startedAt.toUtc().toIso8601String(),
         'originalExercises': draft.originalExercises,
         'exercises': [
@@ -210,9 +216,13 @@ class WorkoutApi {
     }
   }
 
-  Future<List<PreviousSet>> getPreviousSets(String exerciseName) async {
-    final uri = Uri.parse('$_baseUrl/exercises/previous')
-        .replace(queryParameters: {'name': exerciseName});
+  Future<List<PreviousSet>> getPreviousSets(
+    String exerciseName, {
+    String? routineId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/exercises/previous',
+    ).replace(queryParameters: {'name': exerciseName, 'routineId': ?routineId});
     final response = await _client.get(uri);
     if (response.statusCode == 404) return const [];
     if (response.statusCode != 200) {

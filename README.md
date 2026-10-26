@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v31**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v32**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `32`
+Para publicar otra versión después de terminar los cambios (sustituye `33`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 32
-# Añade una sección ## [v32] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v32
+bun scripts/version.mjs prepare 33
+# Añade una sección ## [v33] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v33
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v32'
-git tag -a v32 -m 'v32: descripción de los cambios'
-git push --atomic origin master v32
-bun scripts/version.mjs notes v32 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v32 --verify-tag --title 'v32 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v33'
+git tag -a v33 -m 'v33: descripción de los cambios'
+git push --atomic origin master v33
+bun scripts/version.mjs notes v33 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v33 --verify-tag --title 'v33 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -194,7 +194,7 @@ reconstruye las referencias en orden de guardado antes de paginar. Así un
 récord posterior no borra el logro de una sesión anterior. Esta primera
 implementación lee el historial del usuario completo para calcularlos; si
 crece mucho, conviene persistir los logros por serie y paginar en SQL.
-No requiere migración de la base de datos.
+No requiere migraciones manuales de la base de datos.
 
 PostgreSQL guarda sesiones, ejercicios y cada serie realizada. La primera
 sesión crea el punto de partida. Después, cada posición de serie mantiene su
@@ -211,6 +211,40 @@ de la sesión autenticada. La API rechaza peticiones de una pestaña que todaví
 muestra una cuenta distinta de la cookie actual. Consulta
 [la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
 `app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
+
+## Comparación de resultados por rutina
+
+En los tres puntos de una rutina, **Comparación de resultados → Aislar resultados**
+permite separar sus valores anteriores y récords. Está desactivado por defecto.
+Por ejemplo, el press de «Sábado brazos» puede compararse solo con las sesiones
+de esa rutina, aunque el mismo ejercicio aparezca el lunes. Un candado en la
+tarjeta indica que la opción está activa.
+
+Las rutinas sin aislamiento comparten sus referencias entre sí; las aisladas
+usan únicamente sus propias series completadas. Si todavía no tienen resultados,
+los campos quedan vacíos. La regla de mejora por peso **o** repeticiones se
+mantiene, incluidos los tipos de serie y las W de calentamiento. Editar la rutina,
+retomar su borrador y ver los récords del historial respetan la misma separación.
+
+Las nuevas sesiones y borradores guardan el identificador de la rutina, que
+permanece al renombrarla o moverla. Al actualizar desde versiones anteriores,
+la migración automática asocia una sola vez los nombres coincidentes, ignorando
+mayúsculas y espacios exteriores, que sean únicos dentro de la cuenta. Los
+nombres duplicados, renombrados antes de esta actualización o sin coincidencia
+quedan sin asociar y conservan la comparación compartida. No se importan las
+marcas globales como base de una rutina aislada: se releen sus series reales.
+
+Activar o desactivar la opción recalcula las referencias y los logros de sus
+sesiones anteriores, sin borrar el historial. Se debe terminar o descartar un
+entrenamiento en curso de esa rutina antes de cambiar la opción. Una rutina
+eliminada conserva la identidad de sus sesiones; las copias recibidas al compartir
+tienen un identificador nuevo y empiezan con el aislamiento desactivado.
+
+La API admite `isolateResults` en `PATCH /routine-library`, `routineId` en los
+guardados de sesiones y borradores, y `routineId` como parámetro opcional de
+`GET /exercises/previous`. Se valida la propiedad de la rutina. Los clientes
+antiguos deben recargar la app antes de guardar una rutina aislada; la API devuelve
+`428 ROUTINE_UPGRADE_REQUIRED` para evitar guardados con referencias compartidas.
 
 ## Catálogo global de ejercicios
 

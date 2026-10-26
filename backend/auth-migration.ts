@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import { migrateRoutines } from './routine-migration.ts';
 import { migrateExerciseCatalog } from './catalog-migration.ts';
+import { migrateRoutineResults } from './routine-results-migration.ts';
 
 export async function migrateAuth(client: Sql) {
   const schema = await Bun.file(new URL('./init.sql', import.meta.url)).text();
@@ -24,5 +25,6 @@ export async function migrateAuth(client: Sql) {
     await tx`ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS browser_flow BOOLEAN NOT NULL DEFAULT FALSE`;
     await migrateRoutines(tx);
     await migrateExerciseCatalog(tx);
+    await migrateRoutineResults(tx);
   });
 }

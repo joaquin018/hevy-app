@@ -1,6 +1,8 @@
 export type HistorySession = {
   id: string;
   routineName: string | null;
+  routineId?: string | null;
+  isolateResults?: boolean;
   startedAt: Date;
   completedAt: Date;
   durationSeconds: number;
@@ -37,7 +39,8 @@ export function buildWorkoutHistory(sessions: HistorySession[], rows: HistoryRow
     let records = 0;
     for (const row of grouped.get(session.id) ?? []) {
       const kg = Number(row.kg);
-      const key = `${row.exerciseId}:${row.position}`;
+      const scope = session.isolateResults ? session.routineId : 'shared';
+      const key = `${scope}:${row.exerciseId}:${row.position}`;
       const previous = references.get(key);
       const improves = !previous || kg > previous.kg || row.reps > previous.reps;
       const isRecord = previous !== undefined && improves;

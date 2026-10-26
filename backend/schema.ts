@@ -70,18 +70,21 @@ export const workoutSessions = pgTable('workout_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   routineName: text('routine_name'),
+  // Retain the identity even if the routine is later deleted.
+  routineId: uuid('routine_id'),
+  isolateResults: boolean('isolate_results').notNull().default(false),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }).notNull(),
   durationSeconds: integer('duration_seconds').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index('workout_sessions_user_routine_idx').on(table.userId, table.routineId, table.createdAt, table.id)]);
 
 export const workoutSessionExercises = pgTable('workout_session_exercises', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: uuid('session_id').notNull().references(() => workoutSessions.id, { onDelete: 'cascade' }),
   exerciseId: uuid('exercise_id').notNull().references(() => exercises.id, { onDelete: 'restrict' }),
   position: integer('position').notNull(),
-});
+}, (table) => [index('workout_session_exercises_exercise_idx').on(table.exerciseId, table.sessionId)]);
 
 export const workoutSets = pgTable('workout_sets', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -94,7 +97,7 @@ export const workoutSets = pgTable('workout_sets', {
   weightKg: numeric('weight_kg', { precision: 8, scale: 2 }).notNull(),
   repetitions: integer('repetitions').notNull(),
   completed: boolean('completed').notNull().default(true),
-});
+}, (table) => [index('workout_sets_session_position_idx').on(table.sessionExerciseId, table.position)]);
 
 export const exerciseRecords = pgTable(
   'exercise_records',
@@ -133,6 +136,7 @@ export const routines = pgTable('routines', {
     .notNull()
     .references(() => routineFolders.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  isolateResults: boolean('isolate_results').notNull().default(false),
   position: integer('position').notNull(),
 }, (table) => [index('routines_folder_position_idx').on(table.folderId, table.position, table.id)]);
 
@@ -183,6 +187,8 @@ export const routineShares = pgTable('routine_shares', {
 export const activeWorkoutDrafts = pgTable('active_workout_drafts', {
   userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   routineName: text('routine_name').notNull(),
+  routineId: uuid('routine_id'),
+  isolateResults: boolean('isolate_results').notNull().default(false),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
   originalExercises: jsonb('original_exercises').notNull(),
   exercises: jsonb('exercises').notNull(),
