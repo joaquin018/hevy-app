@@ -111,6 +111,8 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF171A22),
+        surfaceTintColor: Colors.transparent,
         title: const Text('Eliminar entrenamiento'),
         content: Text(
           '¿Quieres eliminar «${session.name}» del ${_date(session.startedAt)}?\n\n'

@@ -5,6 +5,18 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v30] — 2026-10-26
+
+Fondo opaco en la confirmación de borrado del historial.
+
+- Usar un fondo sólido en «Eliminar entrenamiento» para evitar que el historial se vea a través del diálogo.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 8 pruebas de eliminación del historial y análisis estático de la
+pantalla correctos.
+
+[Cambios desde v29](https://github.com/joaquin018/hevy-app/compare/v29...v30).
+
 ## [v29] — 2026-10-26
 
 Compilar Flutter en Docker con un usuario sin privilegios de root.
