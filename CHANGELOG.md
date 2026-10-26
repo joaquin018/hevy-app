@@ -5,6 +5,19 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v39] — 2026-10-26
+
+Hacer más discreto el acceso como invitado en la pantalla de inicio de sesión.
+
+- Sustituir el botón con borde por un enlace de texto pequeño, gris y subrayado.
+- Eliminar el texto explicativo situado debajo del enlace.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 8 pruebas del modo invitado y análisis estático de la pantalla de
+inicio de sesión correctos; coherencia de versiones verificada.
+
+[Cambios desde v38](https://github.com/joaquin018/hevy-app/compare/v38...v39).
+
 ## [v38] — 2026-10-26
 
 Usar la aplicación como invitado, sin registro y con datos temporales.
