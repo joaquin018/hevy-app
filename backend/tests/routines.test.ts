@@ -53,6 +53,7 @@ test('all new endpoints require authentication', async () => {
   const anonymous = { ...alice, token: 'invalid' };
   for (const [path, method, body] of [
     ['/routine-library', 'GET'], ['/routine-library', 'PATCH', emptyPatch(0)],
+    [`/routines/${randomUUID()}/rest-timer`, 'GET'], [`/routines/${randomUUID()}/rest-timer`, 'PUT', { betweenExercisesSeconds: 90 }],
     ['/routine-recipients?q=ali', 'GET'], ['/routine-shares', 'GET'], ['/routine-shares/pending', 'GET'],
     ['/routine-shares', 'POST', { id: randomUUID(), routineId: randomUUID(), recipientId: bob.id, version: 0 }],
     ['/folder-shares', 'POST', { id: randomUUID(), folderId: randomUUID(), recipientId: bob.id, version: 0 }],
@@ -60,6 +61,62 @@ test('all new endpoints require authentication', async () => {
     [`/routine-shares/${randomUUID()}/reject`, 'POST'], [`/routine-shares/${randomUUID()}/revoke`, 'POST'],
   ] as const) expect((await request(path, anonymous, method, body)).status).toBe(401);
 });
+test('routine rests default to three minutes and updates remain independent across routines and accounts', async () => {
+  const a = await createRoutine(), b = await createRoutine(alice, 'Piernas'), c = await createRoutine(bob);
+  const path = (id: string) => `/routines/${id}/rest-timer`;
+  expect(await (await request(path(a.routineId))).json()).toEqual({ betweenExercisesSeconds: 180 });
+  await request('/workout-settings', alice, 'PUT', { betweenExercisesSeconds: 90 }); // Legacy global preference.
+  expect(await (await request(path(b.routineId))).json()).toEqual({ betweenExercisesSeconds: 180 });
+  for (const seconds of [60, 90, 120, 150, 180, 210, 240, 270, 300]) {
+    const response = await request(path(a.routineId), alice, 'PUT', { betweenExercisesSeconds: seconds });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ betweenExercisesSeconds: seconds });
+    expect(await (await request(path(b.routineId))).json()).toEqual({ betweenExercisesSeconds: 180 });
+    expect(await (await request(path(c.routineId), bob)).json()).toEqual({ betweenExercisesSeconds: 180 });
+  }
+  for (const value of [0, 59, 61, 301, 90.5, null]) expect((await request(path(a.routineId), alice, 'PUT', { betweenExercisesSeconds: value })).status).toBe(422);
+  for (const id of [c.routineId, randomUUID()]) {
+    expect((await request(path(id))).status).toBe(404);
+    expect((await request(path(id), alice, 'PUT', { betweenExercisesSeconds: 90 })).status).toBe(404);
+  }
+  expect((await request('/routines/not-a-uuid/rest-timer')).status).toBe(422);
+  // Editing a timer does not invalidate or overwrite a pending library edit.
+  expect((await request('/routine-library', alice, 'PATCH', { ...emptyPatch(b.version),
+    routines: [{ id: a.routineId, folderId: a.folderId, name: 'Nuevo nombre', position: 0, exercises: ['Press'] }] })).status).toBe(200);
+  await migrateAuth(client);
+  expect(await (await request(path(a.routineId))).json()).toEqual({ betweenExercisesSeconds: 300 });
+  expect(await (await request('/workout-settings')).json()).toEqual({ betweenExercisesSeconds: 90 });
+});
+
+test('upgrading v34 starts each existing routine at three minutes without changing its other settings', async () => {
+  const a = await createRoutine();
+  await request('/workout-settings', alice, 'PUT', { betweenExercisesSeconds: 90 });
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', restSeconds: 60 });
+  await client`ALTER TABLE routines DROP COLUMN between_exercises_seconds`;
+  await migrateAuth(client);
+  expect(await (await request(`/routines/${a.routineId}/rest-timer`)).json()).toEqual({ betweenExercisesSeconds: 180 });
+  expect(await (await request('/exercises/rest-timer?name=Press')).json()).toEqual({ restSeconds: 60 });
+  expect((await getLibrary()).folders[0].routines[0].exercises).toEqual(['Press', 'Elevaciones']);
+});
+
+test('shared routine rests are copied independently, and old shares keep the default', async () => {
+  const a = await createRoutine();
+  await request(`/routines/${a.routineId}/rest-timer`, alice, 'PUT', { betweenExercisesSeconds: 90 });
+  const shared = await send(a.routineId, a.version);
+  await request(`/routines/${a.routineId}/rest-timer`, alice, 'PUT', { betweenExercisesSeconds: 300 });
+  expect((await request(`/routine-shares/${shared.id}/accept`, bob, 'POST', {})).status).toBe(200);
+  const copy = (await getLibrary(bob)).folders[0].routines[0];
+  expect(await (await request(`/routines/${copy.id}/rest-timer`, bob)).json()).toEqual({ betweenExercisesSeconds: 90 });
+  await request(`/routines/${copy.id}/rest-timer`, bob, 'PUT', { betweenExercisesSeconds: 120 });
+  expect(await (await request(`/routines/${a.routineId}/rest-timer`)).json()).toEqual({ betweenExercisesSeconds: 300 });
+  const oldId = randomUUID();
+  await db.insert(routineShares).values({ id: oldId, senderId: alice.id, recipientId: carol.id,
+    snapshot: { version: 1, name: 'Anterior', exercises: [{ name: 'Press', muscleGroup: null, restSeconds: 60 }] } });
+  expect((await request(`/routine-shares/${oldId}/accept`, carol, 'POST', {})).status).toBe(200);
+  const oldCopy = (await getLibrary(carol)).folders[0].routines[0];
+  expect(await (await request(`/routines/${oldCopy.id}/rest-timer`, carol)).json()).toEqual({ betweenExercisesSeconds: 180 });
+});
+
 test('account search is bounded, case insensitive, literal and excludes self/legacy', async () => {
   await db.insert(users).values(Array.from({ length: 16 }, (_, i) => ({ displayName: 'Private name', googleSubject: `alex-${i}`, email: `alex${i}@gmail.com` })));
   await db.insert(users).values({ displayName: 'Not Google', email: 'alex-local@gmail.com' });

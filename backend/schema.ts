@@ -139,6 +139,7 @@ export const routines = pgTable('routines', {
   name: text('name').notNull(),
   isolateResults: boolean('isolate_results').notNull().default(false),
   position: integer('position').notNull(),
+  betweenExercisesSeconds: integer('between_exercises_seconds').notNull().default(180),
 }, (table) => [index('routines_folder_position_idx').on(table.folderId, table.position, table.id)]);
 
 export const routineExercises = pgTable('routine_exercises', {
@@ -153,6 +154,7 @@ export const routineExercises = pgTable('routine_exercises', {
 export type RoutineSnapshot = {
   version: 1;
   name: string;
+  betweenExercisesSeconds?: number;
   exercises: { name: string; muscleGroup: string | null; restSeconds: number }[];
 };
 

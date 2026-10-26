@@ -2188,8 +2188,10 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
   }
 
   Future<void> _loadBetweenExercisesSeconds() async {
+    final routineId = widget.routineId;
+    if (routineId == null) return;
     try {
-      final seconds = await _workoutApi.getBetweenExercisesSeconds();
+      final seconds = await _workoutApi.getBetweenExercisesSeconds(routineId);
       if (mounted) setState(() => _betweenExercisesSeconds = seconds);
     } catch (_) {
       // Se conserva el descanso predeterminado si no hay conexión.
@@ -2197,7 +2199,11 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
   }
 
   Future<void> _saveBetweenExercisesSeconds(int seconds) async {
-    await _workoutApi.saveBetweenExercisesSeconds(seconds);
+    final routineId = widget.routineId;
+    if (routineId == null) {
+      throw Exception('Guarda la rutina antes de configurar su descanso.');
+    }
+    await _workoutApi.saveBetweenExercisesSeconds(routineId, seconds);
     if (mounted) setState(() => _betweenExercisesSeconds = seconds);
   }
 
@@ -2398,6 +2404,9 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                                 completed,
                               ),
                           betweenExercisesSeconds: _betweenExercisesSeconds,
+                          routineName: widget.routineName,
+                          canConfigureBetweenExercises:
+                              widget.routineId != null,
                           onBetweenExercisesChanged:
                               _saveBetweenExercisesSeconds,
                           onVolumeChanged: _updateVolume,
@@ -3361,6 +3370,8 @@ class _ExerciseCard extends StatefulWidget {
     required this.onVolumeChanged,
     required this.betweenExercisesSeconds,
     required this.onBetweenExercisesChanged,
+    required this.routineName,
+    required this.canConfigureBetweenExercises,
   });
 
   final String name;
@@ -3372,6 +3383,8 @@ class _ExerciseCard extends StatefulWidget {
   final void Function(int seconds, bool exerciseCompleted) onSetCompleted;
   final int betweenExercisesSeconds;
   final Future<void> Function(int) onBetweenExercisesChanged;
+  final String? routineName;
+  final bool canConfigureBetweenExercises;
   final ValueChanged<double> onVolumeChanged;
 
   @override
@@ -3592,6 +3605,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
             exerciseName: widget.name,
             initialSeconds: _restSeconds,
             betweenExercisesSeconds: widget.betweenExercisesSeconds,
+            routineName: widget.routineName,
+            canConfigureBetweenExercises: widget.canConfigureBetweenExercises,
           ),
         );
     if (selection != null && mounted) {
@@ -4163,11 +4178,15 @@ class _RestTimerSheet extends StatefulWidget {
     required this.exerciseName,
     required this.initialSeconds,
     required this.betweenExercisesSeconds,
+    required this.routineName,
+    required this.canConfigureBetweenExercises,
   });
 
   final String exerciseName;
   final int initialSeconds;
   final int betweenExercisesSeconds;
+  final String? routineName;
+  final bool canConfigureBetweenExercises;
 
   @override
   State<_RestTimerSheet> createState() => _RestTimerSheetState();
@@ -4214,7 +4233,7 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
             const SizedBox(height: 5),
             Text(
               _betweenExercises
-                  ? 'Para todos tus ejercicios'
+                  ? 'Rutina: ${widget.routineName ?? 'Esta rutina'}'
                   : widget.exerciseName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -4223,16 +4242,23 @@ class _RestTimerSheetState extends State<_RestTimerSheet> {
             const SizedBox(height: 18),
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
+              style: SegmentedButton.styleFrom(
+                backgroundColor: const Color(0xFF191D26),
+                foregroundColor: _muted,
+                selectedBackgroundColor: _accent,
+                selectedForegroundColor: Colors.white,
+                side: const BorderSide(color: _border),
+              ),
+              segments: [
+                const ButtonSegment(
                   value: false,
                   label: Text('Entre series'),
                   enabled: true,
                 ),
                 ButtonSegment(
                   value: true,
-                  label: Text('Entre ejercicios'),
-                  enabled: true,
+                  label: const Text('Entre ejercicios'),
+                  enabled: widget.canConfigureBetweenExercises,
                 ),
               ],
               selected: {_betweenExercises},

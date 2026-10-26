@@ -26,6 +26,8 @@ export async function migrateAuth(client: Sql) {
     await tx`CREATE INDEX IF NOT EXISTS login_attempts_expiry_idx ON login_attempts(expires_at)`;
     await tx`ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS browser_flow BOOLEAN NOT NULL DEFAULT FALSE`;
     await migrateRoutines(tx);
+    await tx`ALTER TABLE routines ADD COLUMN IF NOT EXISTS between_exercises_seconds INTEGER NOT NULL DEFAULT 180
+      CHECK (between_exercises_seconds BETWEEN 60 AND 300 AND between_exercises_seconds % 30 = 0)`;
     await migrateExerciseCatalog(tx);
     await migrateRoutineResults(tx);
   });

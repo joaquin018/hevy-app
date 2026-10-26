@@ -26,8 +26,6 @@ class _WorkoutFixture {
         };
       case '/exercises/rest-timer':
         response = {'restSeconds': 60};
-      case '/workout-settings':
-        response = {'betweenExercisesSeconds': 180};
       case '/workout-draft':
         if (request.method == 'PUT') {
           draft = jsonDecode(request.body) as Map<String, dynamic>;

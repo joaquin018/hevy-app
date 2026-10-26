@@ -226,6 +226,7 @@ app.post(
   },
 );
 
+// Compatibility for v34 clients. Current clients use the routine-scoped route.
 app.get('/workout-settings', async ({ userId }) => {
   const [settings] = await db.select({ betweenExercisesSeconds: users.betweenExercisesSeconds })
     .from(users).where(eq(users.id, userId));
@@ -289,6 +290,13 @@ app.put(
 
 const uuid = () => t.String({ format: 'uuid' });
 const position = () => t.Integer({ minimum: 0, maximum: 1000000 });
+app.get('/routines/:id/rest-timer', ({ userId, params }) => library.restTimer(userId, params.id), {
+  params: t.Object({ id: uuid() }),
+});
+app.put('/routines/:id/rest-timer', ({ userId, params, body }) => library.saveRestTimer(userId, params.id, body.betweenExercisesSeconds), {
+  params: t.Object({ id: uuid() }),
+  body: t.Object({ betweenExercisesSeconds: t.Integer({ minimum: 60, maximum: 300, multipleOf: 30 }) }),
+});
 app.get('/routine-library', ({ userId }) => library.read(userId));
 // Older tabs can read, but must reload before saving without a revision.
 app.get('/routine-folders', async ({ userId }) => {

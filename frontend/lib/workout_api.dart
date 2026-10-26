@@ -285,8 +285,12 @@ class WorkoutApi {
     return value['restSeconds'] as int;
   }
 
-  Future<int> getBetweenExercisesSeconds() async {
-    final response = await _client.get(Uri.parse('$_baseUrl/workout-settings'));
+  Future<int> getBetweenExercisesSeconds(String routineId) async {
+    final response = await _client.get(
+      Uri.parse(
+        '$_baseUrl/routines/${Uri.encodeComponent(routineId)}/rest-timer',
+      ),
+    );
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}: ${response.body}');
     }
@@ -295,9 +299,14 @@ class WorkoutApi {
         as int;
   }
 
-  Future<void> saveBetweenExercisesSeconds(int seconds) async {
+  Future<void> saveBetweenExercisesSeconds(
+    String routineId,
+    int seconds,
+  ) async {
     final response = await _client.put(
-      Uri.parse('$_baseUrl/workout-settings'),
+      Uri.parse(
+        '$_baseUrl/routines/${Uri.encodeComponent(routineId)}/rest-timer',
+      ),
       headers: {'content-type': 'application/json'},
       body: jsonEncode({'betweenExercisesSeconds': seconds}),
     );

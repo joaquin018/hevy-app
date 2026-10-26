@@ -46,7 +46,9 @@ http.Client _client({int restSeconds = 60, ValueChanged<int>? onRestSaved}) =>
         '/workout-draft' => _response({}, 404),
         '/exercises/previous' => _response({'sets': []}),
         '/exercises/rest-timer' => _response({'restSeconds': restSeconds}),
-        '/workout-settings' => _response({'betweenExercisesSeconds': 180}),
+        '/routines/routine-a/rest-timer' => _response({
+          'betweenExercisesSeconds': 180,
+        }),
         _ => throw StateError('Unexpected request: ${request.url}'),
       };
     });

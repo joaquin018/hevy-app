@@ -47,6 +47,26 @@ export class RoutineLibrary {
   // Bounded, per-process rate limits; database constraints handle correctness.
   private limits = new Map<string, { until: number; count: number }>();
   constructor(private db: Database) {}
+  async restTimer(userId: string, routineId: string) {
+    const [settings] = await this.db.select({ betweenExercisesSeconds: routines.betweenExercisesSeconds }).from(routines)
+      .innerJoin(routineFolders, eq(routineFolders.id, routines.folderId))
+      .where(and(eq(routines.id, routineId), eq(routineFolders.userId, userId)));
+    if (!settings) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
+    return settings;
+  }
+  async saveRestTimer(userId: string, routineId: string, seconds: number) {
+    return this.db.transaction(async tx => {
+      await lockLibrary(tx, userId);
+      const [settings] = await tx.update(routines).set({ betweenExercisesSeconds: seconds })
+        .where(and(eq(routines.id, routineId), inArray(routines.folderId,
+          tx.select({ id: routineFolders.id }).from(routineFolders).where(eq(routineFolders.userId, userId)))))
+        .returning({ betweenExercisesSeconds: routines.betweenExercisesSeconds });
+      if (!settings) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
+      // Library patches do not edit this column, so timer changes do not
+      // invalidate unrelated pending routine edits.
+      return settings;
+    });
+  }
   private rate(userId: string, operation: string, maximum: number, window: number) {
     const key = `${operation}:${userId}`, now = Date.now();
     const previous = this.limits.get(key);
@@ -185,18 +205,18 @@ export class RoutineLibrary {
       }
       if (version !== input.version) fail(409, 'LIBRARY_CHANGED', 'Actualiza tus rutinas antes de compartir.');
       let name: string;
-      let selected: { id: string; name: string }[];
+      let selected: { id: string; name: string; betweenExercisesSeconds: number }[];
       if (isFolder) {
         const [folder] = await tx.select({ name: routineFolders.name }).from(routineFolders)
           .where(and(eq(routineFolders.id, sourceId), eq(routineFolders.userId, userId)));
         if (!folder) fail(404, 'NOT_FOUND', 'Carpeta no encontrada.');
         name = folder.name;
-        selected = await tx.select({ id: routines.id, name: routines.name }).from(routines)
+        selected = await tx.select({ id: routines.id, name: routines.name, betweenExercisesSeconds: routines.betweenExercisesSeconds }).from(routines)
           .where(eq(routines.folderId, sourceId)).orderBy(asc(routines.position), asc(routines.id)).limit(101);
         if (!selected.length) fail(400, 'EMPTY_FOLDER', 'Añade rutinas antes de compartir esta carpeta.');
         if (selected.length > 100) fail(400, 'FOLDER_TOO_LARGE', 'Puedes compartir hasta 100 rutinas por carpeta.');
       } else {
-        selected = await tx.select({ id: routines.id, name: routines.name }).from(routines)
+        selected = await tx.select({ id: routines.id, name: routines.name, betweenExercisesSeconds: routines.betweenExercisesSeconds }).from(routines)
           .innerJoin(routineFolders, eq(routines.folderId, routineFolders.id))
           .where(and(eq(routines.id, sourceId), eq(routineFolders.userId, userId)));
         if (!selected.length) fail(404, 'NOT_FOUND', 'Rutina no encontrada.');
@@ -222,8 +242,10 @@ export class RoutineLibrary {
         byRoutine.set(e.routineId, list);
       }
       const snapshot: RoutineSnapshot | FolderSnapshot = isFolder
-        ? { version: 2, name, routines: selected.map(r => ({ name: r.name, exercises: byRoutine.get(r.id) ?? [] })) }
-        : { version: 1, name, exercises: byRoutine.get(selected[0].id) ?? [] };
+        ? { version: 2, name, routines: selected.map(r => ({ name: r.name, exercises: byRoutine.get(r.id) ?? [],
+            ...(r.betweenExercisesSeconds !== 180 ? { betweenExercisesSeconds: r.betweenExercisesSeconds } : {}) })) }
+        : { version: 1, name, exercises: byRoutine.get(selected[0].id) ?? [],
+            ...(selected[0].betweenExercisesSeconds !== 180 ? { betweenExercisesSeconds: selected[0].betweenExercisesSeconds } : {}) };
       if (Buffer.byteLength(JSON.stringify(snapshot)) > 60000) fail(400, isFolder ? 'FOLDER_TOO_LARGE' : 'ROUTINE_TOO_LARGE', 'El contenido es demasiado grande para compartir.');
       const [share] = await tx.insert(routineShares).values({ id: input.id, senderId: userId, recipientId: input.recipientId,
         sourceRoutineId: isFolder ? null : sourceId, sourceFolderId: isFolder ? sourceId : null,
@@ -318,7 +340,8 @@ export class RoutineLibrary {
       }
       const [position] = await tx.select({ next: sql<number>`coalesce(max(${routines.position}), -1) + 1` }).from(routines).where(eq(routines.folderId, folder.id));
       const incoming = share.snapshot.version === 2 ? share.snapshot.routines : [share.snapshot];
-      const copies = incoming.map((routine, index) => ({ id: randomUUID(), folderId: folder.id, name: routine.name, position: position.next + index }));
+      const copies = incoming.map((routine, index) => ({ id: randomUUID(), folderId: folder.id, name: routine.name, position: position.next + index,
+        betweenExercisesSeconds: routine.betweenExercisesSeconds ?? 180 }));
       await tx.insert(routines).values(copies);
       const rows = incoming.flatMap((routine, index) => routine.exercises.map((e, position) => ({ routineId: copies[index].id, name: e.name, position })));
       if (rows.length) await tx.insert(routineExercises).values(rows);

@@ -17,19 +17,26 @@ class Fixture {
   int betweenSeconds = 180;
   bool failRead = false, failSave = false;
   final savedGlobal = <int>[];
+  final routineSeconds = <String, int>{};
   final setSeconds = {'Press': 60, 'Remo': 120};
   late final client = MockClient((request) async {
     switch (request.url.path) {
-      case '/workout-settings':
+      case '/routines/routine-a/rest-timer':
+      case '/routines/routine-b/rest-timer':
+        final id = request.url.pathSegments[1];
         if (request.method == 'PUT') {
           if (failSave) return json({}, 503);
-          betweenSeconds =
+          final seconds =
               jsonDecode(request.body)['betweenExercisesSeconds'] as int;
-          savedGlobal.add(betweenSeconds);
+          routineSeconds[id] = seconds;
+          savedGlobal.add(seconds);
         } else if (failRead) {
           return json({}, 503);
         }
-        return json({'betweenExercisesSeconds': betweenSeconds});
+        return json({
+          'betweenExercisesSeconds':
+              routineSeconds[id] ?? (id == 'routine-a' ? betweenSeconds : 180),
+        });
       case '/exercises/rest-timer':
         final name = request.url.queryParameters['name'];
         if (request.method == 'PUT') {
@@ -41,9 +48,9 @@ class Fixture {
       case '/exercises/previous':
         return json({
           'sets': [
-              {'type': 'warmup', 'kg': 1, 'reps': 12},
-              {'type': 'normal', 'kg': 2, 'reps': 10},
-              {'type': 'normal', 'kg': 2, 'reps': 8},
+            {'type': 'warmup', 'kg': 1, 'reps': 12},
+            {'type': 'normal', 'kg': 2, 'reps': 10},
+            {'type': 'normal', 'kg': 2, 'reps': 8},
           ],
         });
       case '/routine-library':
@@ -57,6 +64,11 @@ class Fixture {
                 {
                   'id': 'routine-a',
                   'name': 'Empuje',
+                  'exercises': ['Press', 'Remo'],
+                },
+                {
+                  'id': 'routine-b',
+                  'name': 'Piernas',
                   'exercises': ['Press', 'Remo'],
                 },
               ],
@@ -177,7 +189,7 @@ void main() {
   );
 
   testWidgets(
-    'global rest is configurable from either exercise and does not overwrite individual set rests',
+    'routine rest is configurable from either exercise and does not overwrite individual set rests',
     (tester) async {
       final fixture = Fixture();
       await http.runWithClient(() async {
@@ -209,7 +221,34 @@ void main() {
   );
 
   testWidgets(
-    'saved global rest and its label survive leaving, adjusting and resuming',
+    'each routine keeps its own rest after switching away and returning',
+    (tester) async {
+      final fixture = Fixture();
+      await http.runWithClient(() async {
+        await open(tester);
+        await configure(tester, 'Press', 1);
+        expect(fixture.routineSeconds['routine-a'], 90);
+        for (final entry in [('Piernas', '03:00'), ('Empuje', '01:30')]) {
+          await tester.tap(find.byIcon(Icons.arrow_back));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(ValueKey('iniciar-rutina-${entry.$1}')));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('iniciar-nuevo-entrenamiento')),
+          );
+          await tester.pumpAndSettle();
+          await complete(tester, 'Press');
+          expect(find.text(entry.$2), findsOneWidget);
+        }
+        expect(fixture.routineSeconds.containsKey('routine-b'), isFalse);
+        expect(fixture.setSeconds, {'Press': 60, 'Remo': 120});
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, () => fixture.client);
+    },
+  );
+
+  testWidgets(
+    'saved routine rest and its label survive leaving, adjusting and resuming',
     (tester) async {
       final fixture = Fixture()..betweenSeconds = 90;
       await http.runWithClient(() async {
@@ -256,7 +295,7 @@ void main() {
   testWidgets('editing a routine never starts either timer', (tester) async {
     final fixture = Fixture();
     await http.runWithClient(() async {
-          await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(

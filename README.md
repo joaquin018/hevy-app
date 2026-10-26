@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v34**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v35**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `35`
+Para publicar otra versión después de terminar los cambios (sustituye `36`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 35
-# Añade una sección ## [v35] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v35
+bun scripts/version.mjs prepare 36
+# Añade una sección ## [v36] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v36
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v35'
-git tag -a v35 -m 'v35: descripción de los cambios'
-git push --atomic origin master v35
-bun scripts/version.mjs notes v35 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v35 --verify-tag --title 'v35 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v36'
+git tag -a v36 -m 'v36: descripción de los cambios'
+git push --atomic origin master v36
+bun scripts/version.mjs notes v36 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v36 --verify-tag --title 'v36 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -215,13 +215,15 @@ muestra una cuenta distinta de la cookie actual. Consulta
 ## Descansos entre series y entre ejercicios
 
 El reloj de cada ejercicio abre dos opciones: **Entre series**, que conserva
-el descanso propio de ese ejercicio, y **Entre ejercicios**, un valor global
-para la cuenta con **3 minutos por defecto**. Ambos selectores ofrecen de
+el descanso propio de ese ejercicio, y **Entre ejercicios**, un valor para
+esa rutina con **3 minutos por defecto**. Cambiarlo desde cualquiera de sus
+ejercicios actualiza el descanso de esa rutina sin modificar las demás.
+Ambos selectores ofrecen de
 1 a 5 minutos en pasos de 30 segundos.
 
 Marcar una serie inicia el descanso propio del ejercicio mientras queden otras
 series sin marcar. Al completar todas sus series, incluidas las de calentamiento,
-se inicia el descanso global entre ejercicios. No hace falta terminar la rutina
+se inicia el descanso entre ejercicios de esa rutina. No hace falta terminar la rutina
 completa y el orden de los checks no afecta a esta condición. La barra indica
 el tipo de descanso activo y mantiene los ajustes de ±15 segundos al salir
 y retomar el entrenamiento.
@@ -230,9 +232,13 @@ Si se desmarca una serie o se añade otra pendiente al ejercicio que originó
 el descanso entre ejercicios, ese temporizador se cancela. Editar una rutina
 no inicia temporizadores. Cambiar la duración se aplica a los próximos descansos.
 
-`GET /workout-settings` y `PUT /workout-settings` leen y guardan
-`betweenExercisesSeconds` para la cuenta autenticada. La migración automática
-añade esta preferencia sin modificar los descansos individuales existentes.
+`GET /routines/:id/rest-timer` y `PUT /routines/:id/rest-timer` leen y guardan
+`betweenExercisesSeconds` solo en rutinas de la cuenta autenticada. La migración
+automática inicia cada rutina existente con 180 segundos y conserva los descansos
+individuales entre series. Al compartir rutinas o carpetas, el descanso se copia
+con la rutina y puede modificarse de forma independiente en la copia recibida;
+los envíos antiguos usan 180 segundos. Los endpoints `/workout-settings` de v34
+se mantienen para clientes antiguos y no cambian las preferencias por rutina.
 
 ## Comparación de resultados por rutina
 

@@ -5,6 +5,24 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v35] — 2026-10-26
+
+Personalizar el descanso entre ejercicios por rutina y ajustar el color del selector.
+
+- Usar el violeta de la aplicación para la opción seleccionada y un fondo oscuro para la otra opción.
+- Guardar el descanso entre ejercicios en cada rutina, con 3 minutos por defecto, sin modificar otras rutinas ni los descansos entre series.
+- Mostrar el nombre de la rutina al seleccionar «Entre ejercicios» y conservar su tiempo al cambiar de rutina y volver.
+- Añadir endpoints autenticados por rutina y una migración automática, manteniendo la compatibilidad con los clientes de v34.
+- Copiar el descanso al compartir rutinas o carpetas, con valores independientes para la copia recibida y 3 minutos para envíos antiguos.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 62 pruebas del backend y 54 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Verificados la migración desde
+v34, el aislamiento entre rutinas y cuentas, la recuperación de preferencias,
+las copias compartidas y la conservación de los descansos entre series.
+
+[Cambios desde v34](https://github.com/joaquin018/hevy-app/compare/v34...v35).
+
 ## [v34] — 2026-10-26
 
 Configurar un descanso global entre ejercicios, independiente del descanso entre series.
