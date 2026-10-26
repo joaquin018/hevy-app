@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v37**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v38**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `38`
+Para publicar otra versión después de terminar los cambios (sustituye `39`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 38
-# Añade una sección ## [v38] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v38
+bun scripts/version.mjs prepare 39
+# Añade una sección ## [v39] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v39
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v38'
-git tag -a v38 -m 'v38: descripción de los cambios'
-git push --atomic origin master v38
-bun scripts/version.mjs notes v38 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v38 --verify-tag --title 'v38 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v39'
+git tag -a v39 -m 'v39: descripción de los cambios'
+git push --atomic origin master v39
+bun scripts/version.mjs notes v39 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v39 --verify-tag --title 'v39 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -95,12 +95,21 @@ Configura `WEB_ORIGIN=http://localhost:5173`
 y `GOOGLE_REDIRECT_URI=http://localhost:5173/api/auth/google/callback` en `.env`.
 Consulta [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md).
 
-`SKIP_LOGIN=true` en la API conserva el acceso temporal con el usuario local,
-solo si `WEB_ORIGIN` apunta a localhost.
-Para exigir Google, cambia a `false` y recrea el servicio `api`.
+La pantalla de inicio ofrece **Continuar como invitado** en cualquier dominio,
+incluido localhost. Este modo usa únicamente memoria de la instancia: rutinas,
+ejercicios creados, descansos, borradores, historial y récords desaparecen al
+cerrar o recargar la app, o al salir del modo invitado. No envía estos datos
+a la API ni escribe en PostgreSQL, almacenamiento del navegador o almacenamiento
+seguro del dispositivo. No crea una cuenta ni permite compartir con otras cuentas.
+Para conservar los datos entre instancias se utiliza el acceso con Google.
+
+Para desarrollo con datos persistentes en PostgreSQL, `SKIP_LOGIN=true` en la API
+permite usar el usuario local solo si `WEB_ORIGIN` apunta a localhost.
+Con `SKIP_LOGIN=false` se muestra la pantalla de acceso con Google e invitado.
 
 La PWA incluye manifiesto e iconos para instalarla desde el navegador con HTTPS
-(o localhost). Necesita conexión para cargar y guardar datos. El worker no
+(o localhost). Necesita conexión para cargar la app y sincronizar una cuenta;
+una sesión de invitado ya cargada opera en memoria. El worker no
 almacena respuestas privadas ni ofrece uso sin conexión. Las actualizaciones
 se cargan al reabrir o recargar; no se fuerza una recarga durante un entrenamiento.
 Mientras está abierta, comprueba nuevas versiones cada minuto y al volver a
@@ -144,8 +153,9 @@ dominio público y HTTPS solo al frontend, puerto 80; no publiques PostgreSQL.
 Registra la URI de retorno en Google Cloud. Despliega primero db, luego backend
 y finalmente frontend. `/api/health` debe devolver `{"status":"ok"}`.
 
-Para probar sin Google en localhost, `SKIP_LOGIN=true` da acceso al usuario local.
-El backend rechaza este modo con un `WEB_ORIGIN` público.
+El botón de invitado permite probar sin Google en cualquier dominio sin guardar
+datos fuera de la instancia. `SKIP_LOGIN=true` sigue reservado al desarrollo con
+un usuario local persistente; el backend lo rechaza con un `WEB_ORIGIN` público.
 No migra datos desde tu PC: si quieres conservarlos, restaura un respaldo en db.
 
 Activa Auto Deploy/webhook para ambas Applications si quieres que un push a

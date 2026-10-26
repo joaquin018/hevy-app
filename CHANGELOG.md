@@ -5,6 +5,24 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v38] — 2026-10-26
+
+Usar la aplicación como invitado, sin registro y con datos temporales.
+
+- Añadir «Continuar como invitado» junto al acceso con Google, disponible en cualquier dominio.
+- Permitir crear rutinas y ejercicios, configurar descansos, entrenar y consultar el historial y los récords usando únicamente memoria de la instancia.
+- Eliminar los datos al salir del modo invitado, cerrar o recargar la app, sin enviarlos a la API ni escribirlos en almacenamiento persistente.
+- Mostrar el estado de invitado y la opción para salir; reservar las funciones de compartir para las cuentas registradas.
+- Impedir que clientes o respuestas de sesiones anteriores mezclen datos con la sesión de invitado.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 62 pruebas del frontend, análisis estático y compilación web
+correctos. Verificados el acceso, el entrenamiento, el historial y su borrado,
+la limpieza entre sesiones y el bloqueo de llamadas a la API y al almacenamiento
+persistente durante el modo invitado.
+
+[Cambios desde v37](https://github.com/joaquin018/hevy-app/compare/v37...v38).
+
 ## [v37] — 2026-10-26
 
 Mostrar las opciones de descanso con el formato minutos:segundos.

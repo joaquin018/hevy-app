@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'guest_store.dart';
+
 String get apiBaseUrl {
   const configured = String.fromEnvironment('API_BASE_URL');
   return configured.isNotEmpty
@@ -47,8 +49,41 @@ class AuthController extends ChangeNotifier {
   String? _attemptToken;
   int _generation = 0;
   VoidCallback? onSessionEnded;
+  GuestStore? _guestStore;
+  int _guestNumber = 0;
+  GuestStore? get guestStore => _guestStore;
+  bool get isGuest => _guestStore != null;
+  void continueAsGuest() {
+    if (busy || session != null) {
+      throw const AuthFailure(
+        'Vuelve al inicio de sesión para continuar como invitado.',
+      );
+    }
+    ++_generation;
+    onSessionEnded?.call();
+    _guestStore = GuestStore();
+    session = UserSession(
+      token: '',
+      id: 'guest-${++_guestNumber}',
+      email: 'Invitado',
+    );
+    error = null;
+    notifyListeners();
+  }
+
+  void _endGuestSession() {
+    ++_generation;
+    _guestStore!.end();
+    _guestStore = null;
+    onSessionEnded?.call();
+    session = null;
+    busy = false;
+    error = null;
+    notifyListeners();
+  }
 
   Future<void> restore() async {
+    if (isGuest) return;
     try {
       // Web uses an HttpOnly cookie. This also restores the temporary local
       // account when SKIP_LOGIN is enabled on the server, on every platform.
@@ -104,7 +139,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> signIn() async {
-    if (busy) return;
+    if (busy || isGuest) return;
     final generation = ++_generation;
     busy = true;
     error = null;
@@ -244,6 +279,10 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    if (isGuest) {
+      _endGuestSession();
+      return;
+    }
     final token = session?.token;
     if (token != null) await _revoke(token);
     if (!kIsWeb) await _storage.delete(key: _storageKey);
@@ -255,6 +294,10 @@ class AuthController extends ChangeNotifier {
 
   void expire(UserSession expectedSession) {
     if (!identical(session, expectedSession)) return;
+    if (isGuest) {
+      _endGuestSession();
+      return;
+    }
     onSessionEnded?.call();
     session = null;
     error = 'Tu sesión caducó. Vuelve a entrar con Google.';
@@ -277,6 +320,9 @@ class AuthenticatedClient extends http.BaseClient {
   final UserSession? session;
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (AuthController.instance.isGuest) {
+      throw const AuthFailure('El modo invitado solo usa datos temporales.');
+    }
     final expectedSession = session;
     if (expectedSession != null) {
       if (!identical(AuthController.instance.session, expectedSession)) {
@@ -290,6 +336,9 @@ class AuthenticatedClient extends http.BaseClient {
     var response = await inner
         .send(request)
         .timeout(const Duration(seconds: 20));
+    if (AuthController.instance.isGuest) {
+      throw const AuthFailure('La sesión cambió al modo invitado.');
+    }
     var sessionChanged = false;
     if (response.statusCode == 409) {
       // Business conflicts (library revisions, resolved shares) are unrelated

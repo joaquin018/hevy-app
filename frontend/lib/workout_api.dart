@@ -78,10 +78,12 @@ class ExerciseCatalogItem {
 
 class WorkoutApi {
   WorkoutApi({http.Client? client})
-    : _client = AuthenticatedClient(
-        client ?? http.Client(),
-        AuthController.instance.session,
-      );
+    : _client =
+          AuthController.instance.guestStore?.createClient() ??
+          AuthenticatedClient(
+            client ?? http.Client(),
+            AuthController.instance.session,
+          );
 
   final http.Client _client;
 

@@ -88,6 +88,29 @@ class SignInPage extends StatelessWidget {
                         style: const TextStyle(color: Color(0xFFFF9A9A)),
                       ),
                     ),
+                  ...[
+                    const SizedBox(height: 24),
+                    OutlinedButton(
+                      key: const ValueKey('continuar-como-invitado'),
+                      onPressed: auth.busy ? null : auth.continueAsGuest,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF7C8CFF),
+                        side: const BorderSide(color: Color(0xFF7C8CFF)),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                      ),
+                      child: const Text('Continuar como invitado'),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Sin registro. Tus datos se borran al cerrar o recargar la app.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF9399A6),
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

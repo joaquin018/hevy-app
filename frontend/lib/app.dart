@@ -205,14 +205,16 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
     if (widget.enableCloudPersistence) {
       _loadRoutineFolders();
       _loadActiveWorkoutDraft();
-      _checkPending();
-      _pendingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-        if (WidgetsBinding.instance.lifecycleState ==
-                AppLifecycleState.resumed &&
-            ModalRoute.of(context)?.isCurrent == true) {
-          _checkPending();
-        }
-      });
+      if (!AuthController.instance.isGuest) {
+        _checkPending();
+        _pendingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+          if (WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed &&
+              ModalRoute.of(context)?.isCurrent == true) {
+            _checkPending();
+          }
+        });
+      }
     }
   }
 
@@ -257,6 +259,7 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
   }
 
   Future<void> _checkPending() async {
+    if (AuthController.instance.isGuest) return;
     if (_checkingPending || !mounted) return;
     _checkingPending = true;
     try {
@@ -517,7 +520,11 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
       builder: (_) => _ItemManagementSheet(
         itemType: 'carpeta',
         canReorder: true,
-        canShare: widget.enableCloudPersistence && _ready && !_saving.value,
+        canShare:
+            widget.enableCloudPersistence &&
+            !AuthController.instance.isGuest &&
+            _ready &&
+            !_saving.value,
       ),
     );
     if (!mounted || action == null) return;
@@ -569,7 +576,9 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
                 children: [
                   _RoutinesHeader(
                     onCreateFolder: _ready ? _createFolder : null,
-                    onShared: widget.enableCloudPersistence
+                    onShared:
+                        widget.enableCloudPersistence &&
+                            !AuthController.instance.isGuest
                         ? _openSharedRoutines
                         : null,
                     pending: _pending,
@@ -637,7 +646,11 @@ class _WorkoutHomePageState extends State<WorkoutHomePage>
                                           routines: folder.routines,
                                           onChanged: _persistRoutineFolders,
                                           saving: _saving,
-                                          onShare: widget.enableCloudPersistence
+                                          onShare:
+                                              widget.enableCloudPersistence &&
+                                                  !AuthController
+                                                      .instance
+                                                      .isGuest
                                               ? (routine) async {
                                                   final stale =
                                                       await showRoutineShareDialog(
@@ -1263,14 +1276,29 @@ class _RoutinesHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Expanded(
-            child: Text(
-              'Rutinas',
-              style: TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.5,
-              ),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Rutinas',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (AuthController.instance.isGuest)
+                  const Text(
+                    'Invitado · datos temporales',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: _accent, fontSize: 11),
+                  ),
+              ],
             ),
           ),
           if (AuthController.instance.session != null)
@@ -1282,9 +1310,13 @@ class _RoutinesHeader extends StatelessWidget {
                   enabled: false,
                   child: Text(AuthController.instance.session!.email),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'logout',
-                  child: Text('Cerrar sesión'),
+                  child: Text(
+                    AuthController.instance.isGuest
+                        ? 'Salir del modo invitado'
+                        : 'Cerrar sesión',
+                  ),
                 ),
               ],
               onSelected: (_) async {
