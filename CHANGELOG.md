@@ -5,6 +5,24 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v31] — 2026-10-26
+
+Optimizar la compilación del frontend en Docker.
+
+- Separar el SDK de Flutter de los archivos de la aplicación.
+- Conservar cachés de paquetes de Pub y de archivos intermedios, por versión del SDK y arquitectura.
+- Resolver dependencias desde la caché cuando sea posible, manteniendo la validación estricta del lockfile y descargando los paquetes que falten.
+- Evitar la segunda resolución de dependencias con `flutter build web --no-pub`.
+- Mantener la compilación sin root y la generación del contenido web y del identificador de actualización.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: compilaciones Docker con cachés vacías y calientes, incluida una
+versión con código distinto compilada sin red. Comprobados el contenido nuevo,
+las cabeceras sin caché del identificador y el aviso de actualización entre versiones.
+Las compilaciones con caché vacía y caliente produjeron el mismo contenido.
+
+[Cambios desde v30](https://github.com/joaquin018/hevy-app/compare/v30...v31).
+
 ## [v30] — 2026-10-26
 
 Fondo opaco en la confirmación de borrado del historial.

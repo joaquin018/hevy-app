@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v30**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v31**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `31`
+Para publicar otra versión después de terminar los cambios (sustituye `32`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 31
-# Añade una sección ## [v31] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v31
+bun scripts/version.mjs prepare 32
+# Añade una sección ## [v32] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v32
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v31'
-git tag -a v31 -m 'v31: descripción de los cambios'
-git push --atomic origin master v31
-bun scripts/version.mjs notes v31 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v31 --verify-tag --title 'v31 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v32'
+git tag -a v32 -m 'v32: descripción de los cambios'
+git push --atomic origin master v32
+bun scripts/version.mjs notes v32 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v32 --verify-tag --title 'v32 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -73,6 +73,22 @@ comprobar la identidad del compilador construyendo esa etapa por separado:
 docker build --target build -t hevy-flutter-build-check ./frontend
 docker run --rm --entrypoint sh hevy-flutter-build-check -c 'test "$(id -u)" -ne 0 && id'
 ```
+
+La compilación usa BuildKit y separa el SDK de los archivos de la app. Mantiene
+cachés de paquetes de Pub y de archivos intermedios de Flutter, identificadas
+por versión del SDK y arquitectura, con permisos para el usuario `flutter`.
+Para un lockfile ya descargado, las dependencias se validan en modo offline;
+si el lockfile es nuevo o faltan paquetes, se descargan respetando ese lockfile.
+`flutter build web --no-pub` evita resolver las dependencias una segunda vez.
+La resolución y la compilación comparten un paso para funcionar también si
+Docker ha limpiado las cachés entre despliegues.
+
+`build/web` se genera fuera de las cachés persistentes. El hash de despliegue,
+los archivos de actualización y las cabeceras HTTP se generan como antes, por
+lo que una caché de compilación no impide detectar una versión nueva.
+Las cachés se conservan en el builder de Docker: el primer despliegue o un
+cambio de servidor puede requerir descargar los paquetes de nuevo. No hace
+falta configurar volúmenes en Dokploy ni guardar archivos en el navegador.
 
 La web usa `/api` en el mismo origen y Google usa cookies HttpOnly.
 Configura `WEB_ORIGIN=http://localhost:5173`
