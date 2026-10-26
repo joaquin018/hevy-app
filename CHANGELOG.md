@@ -5,6 +5,22 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v29] — 2026-10-26
+
+Compilar Flutter en Docker con un usuario sin privilegios de root.
+
+- Crear el usuario y grupo `flutter` con UID/GID 10001 y utilizarlo antes de instalar y ejecutar Flutter.
+- Asignarle la propiedad del SDK, el proyecto y la caché de Pub, incluidos los archivos copiados al contenedor.
+- Resolver la causa de la alerta de superusuario sin añadir opciones para ocultarla.
+- Documentar cómo comprobar la identidad del usuario de compilación.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: compilación Docker completa, UID/GID 10001 y propiedad y permisos
+de los archivos comprobados. Imagen final de Nginx verificada con configuración
+válida, respuestas HTTP 200 y generación correcta de la versión de despliegue.
+
+[Cambios desde v28](https://github.com/joaquin018/hevy-app/compare/v28...v29).
+
 ## [v28] — 2026-10-26
 
 Eliminar entrenamientos desde el historial.

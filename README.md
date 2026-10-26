@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v28**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v29**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `29`
+Para publicar otra versión después de terminar los cambios (sustituye `30`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 29
-# Añade una sección ## [v29] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v29
+bun scripts/version.mjs prepare 30
+# Añade una sección ## [v30] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v30
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v29'
-git tag -a v29 -m 'v29: descripción de los cambios'
-git push --atomic origin master v29
-bun scripts/version.mjs notes v29 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v29 --verify-tag --title 'v29 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v30'
+git tag -a v30 -m 'v30: descripción de los cambios'
+git push --atomic origin master v30
+bun scripts/version.mjs notes v30 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v30 --verify-tag --title 'v30 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -63,6 +63,16 @@ docker compose up -d --build api web
 Abre http://localhost:5173. Después de modificar Dart, ejecuta
 `docker compose up -d --build web`. Docker compila Flutter desde el código;
 la imagen final solo contiene Nginx y la aplicación compilada.
+
+La etapa de compilación ejecuta Flutter con el usuario `flutter` (UID/GID 10001).
+El SDK, el proyecto y la caché de Pub pertenecen a ese usuario; la instalación
+de paquetes del sistema se realiza antes de cambiar de usuario. Se puede
+comprobar la identidad del compilador construyendo esa etapa por separado:
+
+```powershell
+docker build --target build -t hevy-flutter-build-check ./frontend
+docker run --rm --entrypoint sh hevy-flutter-build-check -c 'test "$(id -u)" -ne 0 && id'
+```
 
 La web usa `/api` en el mismo origen y Google usa cookies HttpOnly.
 Configura `WEB_ORIGIN=http://localhost:5173`
