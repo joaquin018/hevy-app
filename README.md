@@ -1,6 +1,6 @@
 # Hevy Cloud Stack
 
-Versión actual: **v39**. Consulta el [historial de cambios](CHANGELOG.md) y las
+Versión actual: **v40**. Consulta el [historial de cambios](CHANGELOG.md) y las
 [releases de GitHub](https://github.com/joaquin018/hevy-app/releases).
 
 ## Versionado y publicación
@@ -12,21 +12,21 @@ Los tags anteriores mantienen los archivos y commits históricos originales.
 El hash de `deploy-version.json` identifica los archivos de un despliegue y
 complementa la versión de Git; no sustituye al tag de la release.
 
-Para publicar otra versión después de terminar los cambios (sustituye `40`
+Para publicar otra versión después de terminar los cambios (sustituye `41`
 por el siguiente número):
 
 ```powershell
-bun scripts/version.mjs prepare 40
-# Añade una sección ## [v40] con sus cambios y validación a CHANGELOG.md.
-bun scripts/version.mjs check v40
+bun scripts/version.mjs prepare 41
+# Añade una sección ## [v41] con sus cambios y validación a CHANGELOG.md.
+bun scripts/version.mjs check v41
 # Ejecuta las comprobaciones correspondientes al cambio.
 git add VERSION CHANGELOG.md README.md backend/package.json frontend/pubspec.yaml
 # Incluye también los archivos de la funcionalidad en el commit.
-git commit -m 'chore: prepare release v40'
-git tag -a v40 -m 'v40: descripción de los cambios'
-git push --atomic origin master v40
-bun scripts/version.mjs notes v40 | Set-Content -Encoding utf8 release-notes.tmp.md
-gh release create v40 --verify-tag --title 'v40 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
+git commit -m 'chore: prepare release v41'
+git tag -a v41 -m 'v41: descripción de los cambios'
+git push --atomic origin master v41
+bun scripts/version.mjs notes v41 | Set-Content -Encoding utf8 release-notes.tmp.md
+gh release create v41 --verify-tag --title 'v41 — descripción de los cambios' --notes-file release-notes.tmp.md --latest
 Remove-Item -LiteralPath release-notes.tmp.md
 ```
 
@@ -221,6 +221,18 @@ de la sesión autenticada. La API rechaza peticiones de una pestaña que todaví
 muestra una cuenta distinta de la cookie actual. Consulta
 [la configuración de Google](GOOGLE_AUTH_SETUP.md) para preparar el dominio
 `app.i7l.cl`, crear las credenciales y ejecutar las pruebas de aislamiento.
+
+## Mover ejercicios arrastrando
+
+Al editar una rutina o durante un entrenamiento, haz clic sobre el nombre de
+un ejercicio y arrástralo hacia arriba o abajo para cambiar su posición.
+En pantallas táctiles, mantén pulsado el nombre antes de arrastrarlo.
+La lista se desplaza automáticamente al acercarte a sus bordes.
+
+El ejercicio conserva sus pesos, repeticiones, tipos de serie y marcas de
+completado. El nuevo orden se guarda en el borrador al entrenar y se recupera
+al retomar. Para conservarlo en la rutina, guarda la edición o elige
+**Actualizar rutina** al finalizar el entrenamiento.
 
 ## Descansos entre series y entre ejercicios
 

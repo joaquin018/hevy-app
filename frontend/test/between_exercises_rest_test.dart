@@ -78,8 +78,7 @@ class Fixture {
   });
 }
 
-Finder card(String name) =>
-    find.byKey(ValueKey('ejercicio-activo-${name == 'Press' ? 0 : 1}-$name'));
+Finder card(String name) => find.byKey(ValueKey('ejercicio-activo-$name'));
 Finder check(String name, String set) => find.descendant(
   of: card(name),
   matching: find.byKey(ValueKey('checkbox-$set')),

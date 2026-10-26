@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -1232,17 +1233,13 @@ class _RoutineFolderPageState extends State<_RoutineFolderPage> {
               if (activeWorkout == null) return const SizedBox.shrink();
               return _ActiveWorkoutBanner(
                 workout: activeWorkout,
-                onResume: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => WorkoutPage(
-                      initialExercises: activeWorkout.exercises,
-                      originalExercises: activeWorkout.originalExercises,
-                      routineName: activeWorkout.routineName,
-                      routineId: activeWorkout.routineId,
-                      resumeStartedAt: activeWorkout.startedAt,
-                      initialResults: activeWorkout.results,
-                    ),
-                  ),
+                onResume: () => _openWorkout(
+                  exercises: activeWorkout.exercises,
+                  originalExercises: activeWorkout.originalExercises,
+                  routineName: activeWorkout.routineName,
+                  routineId: activeWorkout.routineId,
+                  resumeStartedAt: activeWorkout.startedAt,
+                  initialResults: activeWorkout.results,
                 ),
               );
             },
@@ -1986,11 +1983,13 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
       ? kg.round().toString()
       : kg.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
 
+  List<WorkoutSetPayload> _resultsFor(String exercise) =>
+      _workoutResults[exercise] ??
+      [for (final set in _exerciseSets[exercise] ?? <_SetData>[]) set.payload];
+
   Map<String, List<WorkoutSetPayload>> _copyWorkoutResults() => {
     for (final exercise in _exerciseOrder)
-      exercise: List<WorkoutSetPayload>.of(
-        _workoutResults[exercise] ?? const [],
-      ),
+      exercise: List<WorkoutSetPayload>.of(_resultsFor(exercise)),
   };
 
   Future<void> _persistActiveWorkout() async {
@@ -2006,9 +2005,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
             for (final exercise in _exerciseOrder)
               WorkoutExercisePayload(
                 name: exercise,
-                sets: List<WorkoutSetPayload>.of(
-                  _workoutResults[exercise] ?? const [],
-                ),
+                sets: List<WorkoutSetPayload>.of(_resultsFor(exercise)),
               ),
           ],
         ),
@@ -2091,7 +2088,10 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         }
       }),
     );
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _syncActiveWorkout();
+    }
   }
 
   String get _formattedVolume {
@@ -2217,6 +2217,15 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     _syncActiveWorkout();
   }
 
+  void _moveExercise(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    setState(() {
+      final exercise = _exerciseOrder.removeAt(oldIndex);
+      _exerciseOrder.insert(newIndex, exercise);
+    });
+    _syncActiveWorkout();
+  }
+
   void _startRestTimer(
     String exerciseName,
     int seconds,
@@ -2292,10 +2301,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         durationSeconds: _elapsedSeconds,
         exercises: [
           for (final exercise in _exerciseOrder)
-            WorkoutExercisePayload(
-              name: exercise,
-              sets: _workoutResults[exercise] ?? const [],
-            ),
+            WorkoutExercisePayload(name: exercise, sets: _resultsFor(exercise)),
         ],
       );
       _workoutClosed = true;
@@ -2373,30 +2379,57 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                 routineName: widget.routineName,
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 14),
-                      for (
-                        var index = 0;
-                        index < _exerciseOrder.length;
-                        index++
-                      ) ...[
-                        if (index > 0) const SizedBox(height: 12),
-                        _ExerciseCard(
-                          key: ValueKey(
-                            'ejercicio-activo-$index-${_exerciseOrder[index]}',
+                child: ReorderableListView(
+                  key: const ValueKey('lista-ejercicios'),
+                  buildDefaultDragHandles: false,
+                  onReorderItem: _moveExercise,
+                  onReorderStart: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  padding: EdgeInsets.only(
+                    top: 14,
+                    bottom: MediaQuery.paddingOf(context).bottom + 76,
+                  ),
+                  proxyDecorator: (child, index, animation) =>
+                      Material(color: Colors.transparent, child: child),
+                  footer: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton.icon(
+                        key: const ValueKey('agregar-ejercicio'),
+                        onPressed: _openExercisePicker,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          name: _exerciseOrder[index],
-                          onDelete: () =>
-                              _removeExercise(_exerciseOrder[index]),
-                          onReplace: (replacement) => _replaceExercise(
-                            _exerciseOrder[index],
-                            replacement,
+                        ),
+                        icon: const Icon(Icons.add, size: 23),
+                        label: const Text(
+                          'Agregar ejercicio',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  children: [
+                    for (final (index, name) in _exerciseOrder.indexed)
+                      Padding(
+                        key: ValueKey('ejercicio-activo-$name'),
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _ExerciseCard(
+                          reorderIndex: index,
+                          name: name,
+                          onDelete: () => _removeExercise(name),
+                          onReplace: (replacement) =>
+                              _replaceExercise(name, replacement),
                           onReorder: _reorderExercises,
                           onSetsChanged: (sets) {
-                            final name = _exerciseOrder[index];
                             _workoutResults[name] = sets;
                             if (_restTimer?.betweenExercises == true &&
                                 _restTimer?.exerciseName == name &&
@@ -2407,47 +2440,12 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                             _syncActiveWorkout();
                           },
                           onSetCompleted: (seconds, completed) =>
-                              _startRestTimer(
-                                _exerciseOrder[index],
-                                seconds,
-                                completed,
-                              ),
+                              _startRestTimer(name, seconds, completed),
                           onVolumeChanged: _updateVolume,
-                          sets: _exerciseSets[_exerciseOrder[index]]!,
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: FilledButton.icon(
-                            key: const ValueKey('agregar-ejercicio'),
-                            onPressed: _openExercisePicker,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            icon: const Icon(Icons.add, size: 23),
-                            label: const Text(
-                              'Agregar ejercicio',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+                          sets: _exerciseSets[name]!,
                         ),
                       ),
-                      SizedBox(
-                        height: MediaQuery.paddingOf(context).bottom + 76,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -3360,9 +3358,40 @@ class _SetData {
   );
 }
 
+class _ExerciseDragStartListener extends StatelessWidget {
+  const _ExerciseDragStartListener({
+    super.key,
+    required this.index,
+    required this.child,
+  });
+
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (event) {
+        if (event.buttons & kPrimaryButton == 0) return;
+        final recognizer = event.kind == PointerDeviceKind.mouse
+            ? ImmediateMultiDragGestureRecognizer(debugOwner: this)
+            : DelayedMultiDragGestureRecognizer(debugOwner: this);
+        recognizer.gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+        SliverReorderableList.of(context).startItemDragReorder(
+          index: index,
+          event: event,
+          recognizer: recognizer,
+        );
+      },
+      child: child,
+    );
+  }
+}
+
 class _ExerciseCard extends StatefulWidget {
   const _ExerciseCard({
-    super.key,
+    required this.reorderIndex,
     required this.name,
     required this.sets,
     required this.onDelete,
@@ -3373,6 +3402,7 @@ class _ExerciseCard extends StatefulWidget {
     required this.onVolumeChanged,
   });
 
+  final int reorderIndex;
   final String name;
   final List<_SetData> sets;
   final VoidCallback onDelete;
@@ -3386,7 +3416,11 @@ class _ExerciseCard extends StatefulWidget {
   State<_ExerciseCard> createState() => _ExerciseCardState();
 }
 
-class _ExerciseCardState extends State<_ExerciseCard> {
+class _ExerciseCardState extends State<_ExerciseCard>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final WorkoutApi _workoutApi = WorkoutApi();
   int _restSeconds = 180;
   int _betweenExercisesSeconds = 180;
@@ -3664,6 +3698,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Container(
       decoration: const BoxDecoration(
         color: _card,
@@ -3683,12 +3718,25 @@ class _ExerciseCardState extends State<_ExerciseCard> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.name,
-                    style: const TextStyle(
-                      color: _accent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  child: _ExerciseDragStartListener(
+                    key: ValueKey('arrastrar-ejercicio-${widget.name}'),
+                    index: widget.reorderIndex,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.grab,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 38),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            widget.name,
+                            style: const TextStyle(
+                              color: _accent,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

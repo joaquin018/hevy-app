@@ -5,6 +5,23 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v40] — 2026-10-26
+
+Mover los ejercicios directamente desde su nombre, al editar o entrenar.
+
+- Arrastrar con el ratón sin espera en PC y con pulsación larga en pantallas táctiles, sin añadir iconos al encabezado.
+- Desplazar automáticamente la lista al acercarse a sus bordes.
+- Conservar pesos, repeticiones, tipos de serie, marcas de completado y descansos al mover ejercicios y retomar el entrenamiento.
+- Guardar el nuevo orden en el borrador y aplicar «Actualizar rutina» también al retomar desde la barra inferior.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 66 pruebas del frontend, análisis estático y compilación web
+correctos. Las 4 pruebas de arrastre también pasan en Chrome, verificando el
+arrastre inmediato con ratón, la pulsación larga, el desplazamiento automático
+y la conservación de los datos al reordenar y retomar.
+
+[Cambios desde v39](https://github.com/joaquin018/hevy-app/compare/v39...v40).
+
 ## [v39] — 2026-10-26
 
 Hacer más discreto el acceso como invitado en la pantalla de inicio de sesión.
