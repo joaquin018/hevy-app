@@ -237,7 +237,8 @@ export class RoutineLibrary {
       for (const e of entries) {
         const config = byName.get(normalize(e.name));
         const list = byRoutine.get(e.routineId) ?? [];
-        list.push({ name: e.name, muscleGroup: config?.muscleGroup ?? null, restSeconds: config?.restSeconds ?? 180 });
+        list.push({ name: e.name, muscleGroup: config?.muscleGroup ?? null, restSeconds: config?.restSeconds ?? 180,
+          ...(config && config.betweenExercisesSeconds !== 180 ? { betweenExercisesSeconds: config.betweenExercisesSeconds } : {}) });
         if (list.length > 100) fail(400, 'ROUTINE_TOO_LARGE', 'Puedes compartir hasta 100 ejercicios por rutina.');
         byRoutine.set(e.routineId, list);
       }
@@ -348,7 +349,8 @@ export class RoutineLibrary {
       const allExercises = incoming.flatMap(routine => routine.exercises);
       if (allExercises.length) {
         const distinct = [...new Map(allExercises.map(e => [normalize(e.name), e])).values()];
-        await tx.insert(exercises).values(distinct.map(e => ({ userId, name: e.name, normalizedName: normalize(e.name), muscleGroup: e.muscleGroup, restSeconds: e.restSeconds })))
+        await tx.insert(exercises).values(distinct.map(e => ({ userId, name: e.name, normalizedName: normalize(e.name), muscleGroup: e.muscleGroup, restSeconds: e.restSeconds,
+          betweenExercisesSeconds: e.betweenExercisesSeconds ?? 180 })))
           .onConflictDoNothing({ target: [exercises.userId, exercises.normalizedName] });
         await publishExercises(tx, distinct);
       }

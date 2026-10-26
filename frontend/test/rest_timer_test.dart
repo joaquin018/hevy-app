@@ -45,9 +45,10 @@ http.Client _client({int restSeconds = 60, ValueChanged<int>? onRestSaved}) =>
         '/routine-shares/pending' => _response({'pending': false}),
         '/workout-draft' => _response({}, 404),
         '/exercises/previous' => _response({'sets': []}),
-        '/exercises/rest-timer' => _response({'restSeconds': restSeconds}),
-        '/routines/routine-a/rest-timer' => _response({
-          'betweenExercisesSeconds': 180,
+        '/exercises/rest-timer' => _response({
+          'restSeconds': request.url.queryParameters['kind'] == 'exercises'
+              ? 180
+              : restSeconds,
         }),
         _ => throw StateError('Unexpected request: ${request.url}'),
       };

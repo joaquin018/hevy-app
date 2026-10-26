@@ -274,9 +274,16 @@ class WorkoutApi {
     );
   }
 
-  Future<int> getRestTimerSeconds(String exerciseName) async {
-    final uri = Uri.parse('$_baseUrl/exercises/rest-timer')
-        .replace(queryParameters: {'name': exerciseName});
+  Future<int> getRestTimerSeconds(
+    String exerciseName, {
+    bool betweenExercises = false,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/exercises/rest-timer').replace(
+      queryParameters: {
+        'name': exerciseName,
+        if (betweenExercises) 'kind': 'exercises',
+      },
+    );
     final response = await _client.get(uri);
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}: ${response.body}');
@@ -285,44 +292,19 @@ class WorkoutApi {
     return value['restSeconds'] as int;
   }
 
-  Future<int> getBetweenExercisesSeconds(String routineId) async {
-    final response = await _client.get(
-      Uri.parse(
-        '$_baseUrl/routines/${Uri.encodeComponent(routineId)}/rest-timer',
-      ),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}: ${response.body}');
-    }
-    return (jsonDecode(response.body)
-            as Map<String, dynamic>)['betweenExercisesSeconds']
-        as int;
-  }
-
-  Future<void> saveBetweenExercisesSeconds(
-    String routineId,
-    int seconds,
-  ) async {
-    final response = await _client.put(
-      Uri.parse(
-        '$_baseUrl/routines/${Uri.encodeComponent(routineId)}/rest-timer',
-      ),
-      headers: {'content-type': 'application/json'},
-      body: jsonEncode({'betweenExercisesSeconds': seconds}),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}: ${response.body}');
-    }
-  }
-
   Future<void> saveRestTimerSeconds({
     required String exerciseName,
     required int restSeconds,
+    bool betweenExercises = false,
   }) async {
     final response = await _client.put(
       Uri.parse('$_baseUrl/exercises/rest-timer'),
       headers: {'content-type': 'application/json'},
-      body: jsonEncode({'name': exerciseName, 'restSeconds': restSeconds}),
+      body: jsonEncode({
+        'name': exerciseName,
+        'restSeconds': restSeconds,
+        if (betweenExercises) 'kind': 'exercises',
+      }),
     );
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}: ${response.body}');

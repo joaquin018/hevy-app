@@ -101,11 +101,21 @@ test('upgrading v34 starts each existing routine at three minutes without changi
 
 test('shared routine rests are copied independently, and old shares keep the default', async () => {
   const a = await createRoutine();
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', restSeconds: 60 });
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', kind: 'exercises', restSeconds: 90 });
   await request(`/routines/${a.routineId}/rest-timer`, alice, 'PUT', { betweenExercisesSeconds: 90 });
   const shared = await send(a.routineId, a.version);
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', kind: 'exercises', restSeconds: 300 });
   await request(`/routines/${a.routineId}/rest-timer`, alice, 'PUT', { betweenExercisesSeconds: 300 });
   expect((await request(`/routine-shares/${shared.id}/accept`, bob, 'POST', {})).status).toBe(200);
   const copy = (await getLibrary(bob)).folders[0].routines[0];
+  expect(await (await request('/exercises/rest-timer?name=Press', bob)).json()).toEqual({ restSeconds: 60 });
+  expect(await (await request('/exercises/rest-timer?name=Press&kind=exercises', bob)).json()).toEqual({ restSeconds: 90 });
+  await request('/exercises/rest-timer', bob, 'PUT', { name: 'Press', kind: 'exercises', restSeconds: 120 });
+  expect(await (await request('/exercises/rest-timer?name=Press&kind=exercises')).json()).toEqual({ restSeconds: 300 });
+  const again = await send(a.routineId, a.version);
+  expect((await request(`/routine-shares/${again.id}/accept`, bob, 'POST', {})).status).toBe(200);
+  expect(await (await request('/exercises/rest-timer?name=Press&kind=exercises', bob)).json()).toEqual({ restSeconds: 120 });
   expect(await (await request(`/routines/${copy.id}/rest-timer`, bob)).json()).toEqual({ betweenExercisesSeconds: 90 });
   await request(`/routines/${copy.id}/rest-timer`, bob, 'PUT', { betweenExercisesSeconds: 120 });
   expect(await (await request(`/routines/${a.routineId}/rest-timer`)).json()).toEqual({ betweenExercisesSeconds: 300 });
@@ -114,6 +124,7 @@ test('shared routine rests are copied independently, and old shares keep the def
     snapshot: { version: 1, name: 'Anterior', exercises: [{ name: 'Press', muscleGroup: null, restSeconds: 60 }] } });
   expect((await request(`/routine-shares/${oldId}/accept`, carol, 'POST', {})).status).toBe(200);
   const oldCopy = (await getLibrary(carol)).folders[0].routines[0];
+  expect(await (await request('/exercises/rest-timer?name=Press&kind=exercises', carol)).json()).toEqual({ restSeconds: 180 });
   expect(await (await request(`/routines/${oldCopy.id}/rest-timer`, carol)).json()).toEqual({ betweenExercisesSeconds: 180 });
 });
 

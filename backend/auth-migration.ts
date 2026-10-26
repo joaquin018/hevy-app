@@ -8,6 +8,8 @@ export async function migrateAuth(client: Sql) {
   await client.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(7132048)`;
     await tx.unsafe(schema);
+    await tx`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS between_exercises_seconds INTEGER NOT NULL DEFAULT 180
+      CHECK (between_exercises_seconds BETWEEN 60 AND 300)`;
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject TEXT`;
     await tx`ALTER TABLE users ADD COLUMN IF NOT EXISTS between_exercises_seconds INTEGER NOT NULL DEFAULT 180

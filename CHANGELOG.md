@@ -5,6 +5,24 @@ publicada conserva su commit; los cambios posteriores reciben otra versión.
 Las fechas siguientes corresponden al cambio versionado. `v14` y `v15` se
 etiquetaron retrospectivamente el 14 de octubre de 2026.
 
+## [v36] — 2026-10-26
+
+Guardar los dos descansos de forma independiente por ejercicio.
+
+- Configurar «Entre series» y «Entre ejercicios» para cada ejercicio de la cuenta, con 3 minutos por defecto y sin modificar los tiempos de otros ejercicios.
+- Mostrar el nombre del ejercicio en ambas pestañas y conservar sus ajustes al utilizarlo en otras rutinas, igual que el descanso entre series.
+- Iniciar el descanso entre ejercicios elegido para ese ejercicio al completar todas sus series.
+- Ampliar la API de descansos con `kind=sets` y `kind=exercises`, manteniendo el contrato anterior cuando se omite el tipo.
+- Añadir una migración automática que conserva los descansos entre series y copiar ambos valores al compartir, respetando las preferencias existentes del receptor.
+- Alineación de `VERSION`, backend y Flutter con la versión publicada.
+
+Validación: 65 pruebas del backend y 54 del frontend, comprobación de tipos,
+análisis estático y compilación web correctos. Verificados los tiempos independientes
+por ejercicio y cuenta, la migración desde v35, la recuperación del temporizador,
+los checks de todas las series y las copias compartidas.
+
+[Cambios desde v35](https://github.com/joaquin018/hevy-app/compare/v35...v36).
+
 ## [v35] — 2026-10-26
 
 Personalizar el descanso entre ejercicios por rutina y ajustar el color del selector.

@@ -57,6 +57,7 @@ export const exercises = pgTable(
     normalizedName: text('normalized_name').notNull(),
     muscleGroup: text('muscle_group'),
     restSeconds: integer('rest_seconds').notNull().default(180),
+    betweenExercisesSeconds: integer('between_exercises_seconds').notNull().default(180),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -155,7 +156,7 @@ export type RoutineSnapshot = {
   version: 1;
   name: string;
   betweenExercisesSeconds?: number;
-  exercises: { name: string; muscleGroup: string | null; restSeconds: number }[];
+  exercises: { name: string; muscleGroup: string | null; restSeconds: number; betweenExercisesSeconds?: number }[];
 };
 
 export type FolderSnapshot = {

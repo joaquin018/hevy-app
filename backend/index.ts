@@ -226,7 +226,7 @@ app.post(
   },
 );
 
-// Compatibility for v34 clients. Current clients use the routine-scoped route.
+// Compatibility for v34 clients. Current clients configure both rests per exercise.
 app.get('/workout-settings', async ({ userId }) => {
   const [settings] = await db.select({ betweenExercisesSeconds: users.betweenExercisesSeconds })
     .from(users).where(eq(users.id, userId));
@@ -241,8 +241,9 @@ app.put('/workout-settings', async ({ body, userId }) => {
 app.get(
   '/exercises/rest-timer',
   async ({ query, userId }) => {
+    const column = query.kind === 'exercises' ? exercises.betweenExercisesSeconds : exercises.restSeconds;
     const [exercise] = await db
-      .select({ restSeconds: exercises.restSeconds })
+      .select({ restSeconds: column })
       .from(exercises)
       .where(
         and(
@@ -254,13 +255,15 @@ app.get(
     return { restSeconds: exercise?.restSeconds ?? 180 };
   },
   {
-    query: t.Object({ name: t.String({ minLength: 1, maxLength: 160 }) }),
+    query: t.Object({ name: t.String({ minLength: 1, maxLength: 160 }), kind: t.Optional(t.Union([t.Literal('sets'), t.Literal('exercises')])) }),
   },
 );
 
 app.put(
   '/exercises/rest-timer',
   async ({ body, userId }) => {
+    const betweenExercises = body.kind === 'exercises';
+    const settings = betweenExercises ? { betweenExercisesSeconds: body.restSeconds } : { restSeconds: body.restSeconds };
     const exercise = await db.transaction(async (tx) => {
       const [saved] = await tx
         .insert(exercises)
@@ -268,13 +271,13 @@ app.put(
           userId: userId,
           name: body.name.trim(),
           normalizedName: normalizeName(body.name),
-          restSeconds: body.restSeconds,
+          ...settings,
         })
         .onConflictDoUpdate({
           target: [exercises.userId, exercises.normalizedName],
-          set: { restSeconds: body.restSeconds },
+          set: settings,
         })
-        .returning({ restSeconds: exercises.restSeconds });
+        .returning({ restSeconds: betweenExercises ? exercises.betweenExercisesSeconds : exercises.restSeconds });
       await publishExercises(tx, [{ name: body.name }]);
       return saved;
     });
@@ -284,12 +287,14 @@ app.put(
     body: t.Object({
       name: t.String({ minLength: 1, maxLength: 160 }),
       restSeconds: t.Integer({ minimum: 60, maximum: 300 }),
+      kind: t.Optional(t.Union([t.Literal('sets'), t.Literal('exercises')])),
     }),
   },
 );
 
 const uuid = () => t.String({ format: 'uuid' });
 const position = () => t.Integer({ minimum: 0, maximum: 1000000 });
+// Compatibility for v35 clients; these settings do not override exercise rests.
 app.get('/routines/:id/rest-timer', ({ userId, params }) => library.restTimer(userId, params.id), {
   params: t.Object({ id: uuid() }),
 });

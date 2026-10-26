@@ -77,9 +77,6 @@ class Fixture {
         });
       case '/exercises/rest-timer':
         return json({'restSeconds': 60});
-      case '/routines/routine-a/rest-timer':
-      case '/routines/routine-b/rest-timer':
-        return json({'betweenExercisesSeconds': 180});
       case '/workout-sessions':
         savedSession = jsonDecode(request.body) as Map<String, dynamic>;
         return json({'id': 'session-a'}, 201);

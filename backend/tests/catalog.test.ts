@@ -39,6 +39,48 @@ beforeEach(async () => {
 });
 afterAll(async () => { await client.end(); await admin`DROP SCHEMA ${admin(schema)} CASCADE`; await admin.end(); });
 
+test('each exercise has two independent private rests with the same defaults and storage behavior', async () => {
+  const read = async (name: string, kind = 'sets', user = alice) => (await request(`/exercises/rest-timer?name=${encodeURIComponent(name)}&kind=${kind}`, user)).json();
+  expect(await read('Press')).toEqual({ restSeconds: 180 });
+  expect(await read('Press', 'exercises')).toEqual({ restSeconds: 180 });
+  expect((await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', restSeconds: 90 })).status).toBe(200);
+  for (const seconds of [60, 90, 120, 150, 180, 210, 240, 270, 300]) {
+    const result = await request('/exercises/rest-timer', alice, 'PUT', { name: ' Press ', kind: 'exercises', restSeconds: seconds });
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual({ restSeconds: seconds });
+    expect(await read('PRESS', 'exercises')).toEqual({ restSeconds: seconds });
+    expect(await read('Press')).toEqual({ restSeconds: 90 });
+    expect(await read('Remo', 'exercises')).toEqual({ restSeconds: 180 });
+    expect(await read('Press', 'exercises', bob)).toEqual({ restSeconds: 180 });
+  }
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', restSeconds: 120 });
+  await migrateAuth(client);
+  expect(await read('Press')).toEqual({ restSeconds: 120 });
+  expect(await read('Press', 'exercises')).toEqual({ restSeconds: 300 });
+  expect(await catalog(bob)).toEqual([{ name: 'Press', muscleGroup: null }]);
+});
+
+test('exercise rest kinds and durations are validated and anonymous requests cannot change them', async () => {
+  const anonymous = { ...alice, token: 'invalid' };
+  expect((await request('/exercises/rest-timer?name=Press&kind=exercises', anonymous)).status).toBe(401);
+  expect((await request('/exercises/rest-timer', anonymous, 'PUT', { name: 'Press', kind: 'exercises', restSeconds: 90 })).status).toBe(401);
+  for (const seconds of [0, 59, 301, null]) {
+    expect((await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', kind: 'exercises', restSeconds: seconds })).status).toBe(422);
+  }
+  expect((await request('/exercises/rest-timer?name=Press&kind=routine')).status).toBe(422);
+  expect((await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', kind: 'routine', restSeconds: 90 })).status).toBe(422);
+});
+
+test('upgrading v35 initializes per-exercise transition rests without overwriting set rests or copying global preferences', async () => {
+  await request('/workout-settings', alice, 'PUT', { betweenExercisesSeconds: 90 });
+  await request('/exercises/rest-timer', alice, 'PUT', { name: 'Press', restSeconds: 60 });
+  await client`ALTER TABLE exercises DROP COLUMN between_exercises_seconds`;
+  await migrateAuth(client);
+  expect(await (await request('/exercises/rest-timer?name=Press')).json()).toEqual({ restSeconds: 60 });
+  expect(await (await request('/exercises/rest-timer?name=Press&kind=exercises')).json()).toEqual({ restSeconds: 180 });
+  expect(await (await request('/workout-settings')).json()).toEqual({ betweenExercisesSeconds: 90 });
+});
+
 test('a created exercise is immediately visible to all accounts without importing personal data', async () => {
   const response = await request('/exercises', alice, 'POST', { name: '  Press inclinado  ', muscleGroup: ' Pecho ' });
   expect(response.status).toBe(201);

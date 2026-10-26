@@ -14,35 +14,28 @@ http.Response json(Object value, [int status = 200]) => http.Response(
 );
 
 class Fixture {
-  int betweenSeconds = 180;
+  final betweenSeconds = {'Press': 180, 'Remo': 180};
   bool failRead = false, failSave = false;
-  final savedGlobal = <int>[];
-  final routineSeconds = <String, int>{};
+  final savedTransitions = <int>[];
   final setSeconds = {'Press': 60, 'Remo': 120};
   late final client = MockClient((request) async {
     switch (request.url.path) {
-      case '/routines/routine-a/rest-timer':
-      case '/routines/routine-b/rest-timer':
-        final id = request.url.pathSegments[1];
-        if (request.method == 'PUT') {
-          if (failSave) return json({}, 503);
-          final seconds =
-              jsonDecode(request.body)['betweenExercisesSeconds'] as int;
-          routineSeconds[id] = seconds;
-          savedGlobal.add(seconds);
-        } else if (failRead) {
-          return json({}, 503);
-        }
-        return json({
-          'betweenExercisesSeconds':
-              routineSeconds[id] ?? (id == 'routine-a' ? betweenSeconds : 180),
-        });
       case '/exercises/rest-timer':
         final name = request.url.queryParameters['name'];
         if (request.method == 'PUT') {
           final body = jsonDecode(request.body);
-          setSeconds[body['name'] as String] = body['restSeconds'] as int;
+          if (body['kind'] == 'exercises') {
+            if (failSave) return json({}, 503);
+            betweenSeconds[body['name'] as String] = body['restSeconds'] as int;
+            savedTransitions.add(body['restSeconds'] as int);
+          } else {
+            setSeconds[body['name'] as String] = body['restSeconds'] as int;
+          }
           return json({'restSeconds': body['restSeconds']});
+        }
+        if (request.url.queryParameters['kind'] == 'exercises') {
+          if (failRead) return json({}, 503);
+          return json({'restSeconds': betweenSeconds[name]});
         }
         return json({'restSeconds': setSeconds[name]});
       case '/exercises/previous':
@@ -189,13 +182,14 @@ void main() {
   );
 
   testWidgets(
-    'routine rest is configurable from either exercise and does not overwrite individual set rests',
+    'each exercise has separate set and transition rests without affecting another exercise',
     (tester) async {
       final fixture = Fixture();
       await http.runWithClient(() async {
         await open(tester);
         await configure(tester, 'Press', 1); // 1 min 30s.
-        expect(fixture.savedGlobal, [90]);
+        expect(fixture.savedTransitions, [90]);
+        expect(fixture.betweenSeconds, {'Press': 90, 'Remo': 180});
         expect(fixture.setSeconds, {'Press': 60, 'Remo': 120});
         await complete(tester, 'Press');
         expect(find.text('01:30'), findsOneWidget);
@@ -203,7 +197,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Entre ejercicios').last);
         await tester.pumpAndSettle();
-        expect(tester.widget<Text>(find.text('1 min 30s')).style!.fontSize, 20);
+        expect(tester.widget<Text>(find.text('3 min')).style!.fontSize, 20);
+        expect(find.text('Rutina: Empuje'), findsNothing);
         final wheel = tester.widget<ListWheelScrollView>(
           find.byType(ListWheelScrollView),
         );
@@ -211,9 +206,12 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Listo'));
         await tester.pumpAndSettle();
-        expect(fixture.savedGlobal, [90, 300]);
+        expect(fixture.savedTransitions, [90, 300]);
+        expect(fixture.betweenSeconds, {'Press': 90, 'Remo': 300});
         await tap(tester, check('Press', '3'));
         await tap(tester, check('Press', '3'));
+        expect(find.text('01:30'), findsOneWidget);
+        await complete(tester, 'Remo');
         expect(find.text('05:00'), findsOneWidget);
         await tester.pumpWidget(const SizedBox.shrink());
       }, () => fixture.client);
@@ -221,14 +219,14 @@ void main() {
   );
 
   testWidgets(
-    'each routine keeps its own rest after switching away and returning',
+    'exercise preferences persist across routines just like set rests',
     (tester) async {
       final fixture = Fixture();
       await http.runWithClient(() async {
         await open(tester);
         await configure(tester, 'Press', 1);
-        expect(fixture.routineSeconds['routine-a'], 90);
-        for (final entry in [('Piernas', '03:00'), ('Empuje', '01:30')]) {
+        expect(fixture.betweenSeconds['Press'], 90);
+        for (final entry in [('Piernas', '01:30'), ('Empuje', '01:30')]) {
           await tester.tap(find.byIcon(Icons.arrow_back));
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(ValueKey('iniciar-rutina-${entry.$1}')));
@@ -240,7 +238,7 @@ void main() {
           await complete(tester, 'Press');
           expect(find.text(entry.$2), findsOneWidget);
         }
-        expect(fixture.routineSeconds.containsKey('routine-b'), isFalse);
+        expect(fixture.betweenSeconds['Remo'], 180);
         expect(fixture.setSeconds, {'Press': 60, 'Remo': 120});
         await tester.pumpWidget(const SizedBox.shrink());
       }, () => fixture.client);
@@ -248,9 +246,10 @@ void main() {
   );
 
   testWidgets(
-    'saved routine rest and its label survive leaving, adjusting and resuming',
+    'saved exercise rest and its label survive leaving, adjusting and resuming',
     (tester) async {
-      final fixture = Fixture()..betweenSeconds = 90;
+      final fixture = Fixture();
+      fixture.betweenSeconds['Press'] = 90;
       await http.runWithClient(() async {
         await open(tester);
         await complete(tester, 'Press');
@@ -284,7 +283,7 @@ void main() {
           find.text('No se pudo guardar el tiempo de descanso.'),
           findsOneWidget,
         );
-        expect(fixture.savedGlobal, isEmpty);
+        expect(fixture.savedTransitions, isEmpty);
         await complete(tester, 'Press');
         expect(find.text('03:00'), findsOneWidget);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -307,6 +306,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await configure(tester, 'Press', 1);
+      expect(fixture.betweenSeconds['Press'], 90);
       await complete(tester, 'Press');
       expect(find.text('+15'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
